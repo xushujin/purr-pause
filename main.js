@@ -29,7 +29,7 @@ const RESOURCES_PATH = IS_PACKAGED
 
 const USER_CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config.json');
-const DEFAULT_CONFIG = { thresholdMinutes: 45, breakMinutes: 5, customWebmDir: '', walkVideo: 'cat-walk.webm', idleVideo: 'cat-rest.webm', animationMode: 'walk-zoom' };
+const DEFAULT_CONFIG = { thresholdMinutes: 45, breakMinutes: 5, customWebmDir: '', walkVideo: 'cat-walk.webm', idleVideo: 'cat-rest.webm', animationMode: 'walk-flat' };
 let config = { ...DEFAULT_CONFIG };
 let wins = [];
 let settingsWin = null;

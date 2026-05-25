@@ -150,10 +150,10 @@ sudo apt install xprintidle
         <h2>2. 安装</h2>
         <h3>2.1 通过 .deb 包安装</h3>
 <pre><code># 下载最新版本
-wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.0.0_amd64.deb
+wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.1.0_amd64.deb
 
 # 安装
-sudo dpkg -i purr-pause_1.0.0_amd64.deb
+sudo dpkg -i purr-pause_1.1.0_amd64.deb
 
 # 如有依赖问题
 sudo apt-get install -f</code></pre>
@@ -188,7 +188,7 @@ rm -rf ~/.config/purr-pause/</code></pre>
 <pre><code>{
   "thresholdMinutes": 45,
   "breakMinutes": 5,
-  "animationMode": "walk-zoom",
+  "animationMode": "walk-flat",
   "customWebmDir": "",
   "walkVideo": "cat-walk.webm",
   "idleVideo": "cat-rest.webm"
@@ -199,7 +199,7 @@ rm -rf ~/.config/purr-pause/</code></pre>
             <tr><th>字段</th><th>说明</th><th>默认值</th><th>有效范围</th></tr>
             <tr><td><code>thresholdMinutes</code></td><td>连续使用多久后提醒（分钟）</td><td>45</td><td>1 ~ 480</td></tr>
             <tr><td><code>breakMinutes</code></td><td>休息倒计时时长（分钟）</td><td>5</td><td>1 ~ 60</td></tr>
-            <tr><td><code>animationMode</code></td><td>动画模式（仅激活用户可切换）</td><td>walk-zoom</td><td>walk-zoom / fade-center / walk-flat / walk-center</td></tr>
+            <tr><td><code>animationMode</code></td><td>动画模式（仅激活用户可切换）</td><td>walk-flat</td><td>walk-zoom / fade-center / walk-flat / walk-center</td></tr>
             <tr><td><code>customWebmDir</code></td><td>自定义素材目录（仅激活用户可设置）</td><td>""</td><td>有效目录路径</td></tr>
             <tr><td><code>walkVideo</code></td><td>走路动画文件名</td><td>cat-walk.webm</td><td>有效文件名</td></tr>
             <tr><td><code>idleVideo</code></td><td>休息动画文件名</td><td>cat-rest.webm</td><td>有效文件名</td></tr>
@@ -495,7 +495,7 @@ jobs:
 <pre><code># 1. 确认 package.json/package-lock.json 版本号已更新
 
 # 2. 推送标签触发构建
-git tag v1.0.0
+git tag v1.1.0
 git push origin --tags</code></pre>
 
         <h2>11. 数据目录总览</h2>

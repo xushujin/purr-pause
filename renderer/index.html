@@ -150,6 +150,42 @@
         let remainingSeconds = 300;
         let idleShown = false;
         let dismissed = false;
+        const BASE_CAT_HEIGHT = 200;
+        const MAX_CAT_SCALE = 5;
+        const MAX_SCREEN_HEIGHT_RATIO = 0.85;
+        const MAX_SCREEN_WIDTH_RATIO = 0.9;
+
+        function getVideoAspectRatio(video) {
+            if (video.videoWidth && video.videoHeight) {
+                return video.videoWidth / video.videoHeight;
+            }
+            return 16 / 9;
+        }
+
+        function getConstrainedCatScale(video) {
+            const baseWidth = BASE_CAT_HEIGHT * getVideoAspectRatio(video);
+            return Math.min(
+                (window.innerHeight * MAX_SCREEN_HEIGHT_RATIO) / BASE_CAT_HEIGHT,
+                (window.innerWidth * MAX_SCREEN_WIDTH_RATIO) / baseWidth,
+                MAX_CAT_SCALE
+            );
+        }
+
+        function getBaseCatSize(video) {
+            return {
+                width: BASE_CAT_HEIGHT * getVideoAspectRatio(video),
+                height: BASE_CAT_HEIGHT
+            };
+        }
+
+        function getConstrainedCatSize(video) {
+            const scale = getConstrainedCatScale(video);
+            const aspectRatio = getVideoAspectRatio(video);
+            return {
+                width: BASE_CAT_HEIGHT * aspectRatio * scale,
+                height: BASE_CAT_HEIGHT * scale
+            };
+        }
 
         function startAnimation(config) {
             currentConfig = config;
@@ -231,12 +267,13 @@
 
         function walkZoom() {
             const duration = catWalkVideo.duration ? catWalkVideo.duration * 1000 : 3000;
-            const targetRight = (window.innerWidth / 2) - 100;
-            const targetBottom = (window.innerHeight / 2) - 100;
+            const endScale = getConstrainedCatScale(catWalkVideo);
+            const baseSize = getBaseCatSize(catWalkVideo);
+            const targetRight = (window.innerWidth - baseSize.width) / 2;
+            const targetBottom = (window.innerHeight - baseSize.height) / 2;
             const startRight = -220;
             const startBottom = 48;
             const startScale = 0.4;
-            const endScale = Math.min((window.innerHeight * 0.85) / 200, 5);
             const startTime = performance.now();
 
             function step(now) {
@@ -264,8 +301,6 @@
         function startFadeCenter(config) {
             catContainer.style.display = 'none';
 
-            const targetHeight = window.innerHeight * 0.85;
-
             catIdle.style.display = 'block';
             catIdle.style.position = 'fixed';
             catIdle.style.left = '50%';
@@ -277,15 +312,15 @@
             catIdle.style.transform = 'translate(-50%, -50%) scale(0.05)';
             catIdle.style.opacity = '0';
 
-            catIdleVideo.removeAttribute('class');
-            catIdleVideo.setAttribute('style', 'width:auto !important; height:' + targetHeight + 'px !important; max-height:none !important; display:block !important;');
-
             catIdleVideo.load();
             catIdleVideo.currentTime = 0;
 
             function beginFade() {
                 if (idleShown) return;
                 idleShown = true;
+                const targetSize = getConstrainedCatSize(catIdleVideo);
+                catIdleVideo.removeAttribute('class');
+                catIdleVideo.setAttribute('style', 'width:' + targetSize.width + 'px !important; height:' + targetSize.height + 'px !important; max-width:none !important; max-height:none !important; display:block !important;');
                 catIdleVideo.play().catch(() => {});
                 const duration = 3000;
                 const startTime = performance.now();
@@ -325,12 +360,10 @@
 
         // Mode 3: walk-flat (walk from right, no scale change)
         function startWalkFlat(config) {
-            const fixedScale = Math.min((window.innerHeight * 0.85) / 200, 5);
-
             catContainer.style.display = 'block';
             catContainer.style.right = '-220px';
             catContainer.style.bottom = `${(window.innerHeight / 2) - 100}px`;
-            catContainer.style.transform = `scale(${fixedScale})`;
+            catContainer.style.transform = 'scale(0.4)';
 
             catWalkVideo.load();
             catIdleVideo.load();
@@ -339,6 +372,9 @@
             function beginWalk() {
                 if (started) return;
                 started = true;
+                const fixedScale = getConstrainedCatScale(catWalkVideo);
+                catContainer.style.bottom = `${(window.innerHeight - BASE_CAT_HEIGHT) / 2}px`;
+                catContainer.style.transform = `scale(${fixedScale})`;
                 catWalkVideo.play();
                 requestAnimationFrame(() => walkFlat(fixedScale));
             }
@@ -351,7 +387,8 @@
 
         function walkFlat(fixedScale) {
             const duration = catWalkVideo.duration ? catWalkVideo.duration * 1000 : 3000;
-            const targetRight = (window.innerWidth / 2) - 100;
+            const baseSize = getBaseCatSize(catWalkVideo);
+            const targetRight = (window.innerWidth - baseSize.width) / 2;
             const startRight = -220;
             const startTime = performance.now();
 
@@ -372,13 +409,11 @@
 
         // Mode 4: walk-center (walk out from screen center)
         function startWalkCenter(config) {
-            const endScale = Math.min((window.innerHeight * 0.85) / 200, 5);
-            const targetRight = (window.innerWidth / 2) - 100;
-            const targetBottom = (window.innerHeight / 2) - 100;
+            const baseSize = getBaseCatSize(catWalkVideo);
 
             catContainer.style.display = 'block';
-            catContainer.style.right = targetRight + 'px';
-            catContainer.style.bottom = targetBottom + 'px';
+            catContainer.style.right = ((window.innerWidth - baseSize.width) / 2) + 'px';
+            catContainer.style.bottom = ((window.innerHeight - baseSize.height) / 2) + 'px';
             catContainer.style.transform = 'scale(0.05)';
             catContainer.style.opacity = '0';
 
@@ -389,11 +424,19 @@
             function beginWalk() {
                 if (started) return;
                 started = true;
+                const endScale = getConstrainedCatScale(catWalkVideo);
+                const baseSize = getBaseCatSize(catWalkVideo);
+                catContainer.style.right = ((window.innerWidth - baseSize.width) / 2) + 'px';
+                catContainer.style.bottom = ((window.innerHeight - baseSize.height) / 2) + 'px';
                 catWalkVideo.play();
                 requestAnimationFrame(() => walkCenter(endScale));
             }
 
             function showCenterIdleFallback() {
+                const endScale = getConstrainedCatScale(catWalkVideo);
+                const baseSize = getBaseCatSize(catWalkVideo);
+                catContainer.style.right = ((window.innerWidth - baseSize.width) / 2) + 'px';
+                catContainer.style.bottom = ((window.innerHeight - baseSize.height) / 2) + 'px';
                 catContainer.style.transform = `scale(${endScale})`;
                 catContainer.style.opacity = '1';
                 showIdle();

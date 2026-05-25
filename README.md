@@ -6,7 +6,7 @@
 
 - 监控屏幕使用时间，超时后肥猫从屏幕边缘走到中央
 - 四种动画模式：右下角走出（放大）、中央淡入、右侧走出、中央走出（需激活）
-- 猫咪从小变大，走完后躺下占满屏幕
+- 猫咪从小变大，走完后躺下并自动适配屏幕宽高
 - 倒计时休息，结束后猫咪渐变消失
 - 多显示器支持，猫咪同时出现在所有屏幕
 - 暂停监控（30 分钟 / 1 小时 / 2 小时 / 手动恢复）
@@ -23,7 +23,7 @@
 ### Ubuntu / Debian
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.0.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.1.0_amd64.deb
 ```
 
 ### 从源码运行
@@ -123,7 +123,9 @@ purr-pause/
 │   ├── settings.html    # 设置窗口
 │   └── activation.html  # 激活窗口
 ├── assets/
-│   ├── images/tray-icon.png
+│   ├── images/
+│   │   ├── logo.png          # 应用 logo 源图
+│   │   └── tray-icon.png     # 系统托盘图标
 │   └── webm/
 │       ├── cat-walk.webm
 │       └── cat-rest.webm

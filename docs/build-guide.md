@@ -50,13 +50,13 @@ npm run build:linux
 ### 产物位置
 
 ```
-dist/purr-pause_1.0.0_amd64.deb
+dist/purr-pause_1.1.0_amd64.deb
 ```
 
 ### 安装测试
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.0.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.1.0_amd64.deb
 ```
 
 通过 `sudo dpkg -i` 安装时，deb 的 `afterInstall` 脚本会为执行 sudo 的桌面用户写入 `~/.config/autostart/purr-pause.desktop`，用于 Ubuntu 登录后自启动。应用内设置页的“开机自动启动”开关读写同一个文件。
@@ -94,8 +94,8 @@ npm run build:mac
 ### 产物位置
 
 ```
-dist/purr-pause-1.0.0.dmg
-dist/purr-pause-1.0.0-arm64.dmg  (Apple Silicon)
+dist/purr-pause-1.1.0.dmg
+dist/purr-pause-1.1.0-arm64.dmg  (Apple Silicon)
 ```
 
 ### 安装测试
@@ -124,7 +124,7 @@ npm run build:win
 ### 产物位置
 
 ```
-dist/purr-pause-Setup-1.0.0.exe
+dist/purr-pause-Setup-1.1.0.exe
 ```
 
 ### 安装测试
@@ -241,8 +241,8 @@ jobs:
 ### 使用方法
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 推送 tag 后 GitHub Actions 会自动在三个平台上构建，构建完成后在 Actions 页面下载产物。
@@ -291,6 +291,7 @@ purr-pause/
 │   └── settings.html    # 设置窗口
 ├── assets/
 │   ├── images/
+│   │   ├── logo.png
 │   │   └── tray-icon.png
 │   └── webm/
 │       ├── cat-walk.webm   # 走路动画

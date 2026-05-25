@@ -197,7 +197,7 @@
         window.electronAPI.onLoadConfig((config) => {
             thresholdInput.value = config.thresholdMinutes || 45;
             breakInput.value = config.breakMinutes || 5;
-            animationModeInput.value = config.animationMode || 'walk-zoom';
+            animationModeInput.value = config.animationMode || 'walk-flat';
             customWebmDir = config.customWebmDir || '';
             isActivated = config._isActivated || false;
             autoLaunchInput.checked = config._autoLaunch || false;

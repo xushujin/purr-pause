@@ -5,7 +5,7 @@
 胖猫暂停一下（PurrPause） 是一款基于 Electron 的桌面应用程序，运行于 Linux、macOS 和 Windows 系统。当用户连续使用电脑超过设定时间后，一只胖猫会走上屏幕，提醒用户休息。
 
 - **应用名称**: 胖猫暂停一下（PurrPause）
-- **版本**: 1.0.0
+- **版本**: 1.1.0
 - **许可证**: MIT
 - **应用 ID**: com.purr-pause.app
 
@@ -73,6 +73,7 @@ purr-pause/
 │   │   ├── cat-walk.webm    # 猫走路动画
 │   │   └── cat-rest.webm    # 猫休息动画
 │   └── images/
+│       ├── logo.png         # 应用 logo 源图
 │       └── tray-icon.png    # 系统托盘图标
 ├── build/
 │   └── icons/               # 应用图标（多平台）
@@ -162,9 +163,9 @@ macOS 下原先的 `ioreg | grep -c CGSSessionScreenLockedTime` 降级检测在�
 
 | 模式 | 值 | 说明 |
 |------|------|------|
-| 右下角走出 | `walk-zoom` | 从右下角走入，边走边放大到屏幕中央（默认） |
-| 中央淡入 | `fade-center` | 在屏幕中央由小变大淡入，最终占屏幕高度 85% |
-| 右侧走出 | `walk-flat` | 以固定大小从右侧走到屏幕中央，不缩放 |
+| 右下角走出 | `walk-zoom` | 从右下角走入，边走边放大到屏幕中央 |
+| 中央淡入 | `fade-center` | 在屏幕中央由小变大淡入，最终按屏幕宽高自适应 |
+| 右侧走出 | `walk-flat` | 以固定大小从右侧走到屏幕中央，不缩放（默认） |
 | 中央走出 | `walk-center` | 在屏幕中央播放走路动画，由小到大走出 |
 
 动画模式切换为激活用户专属功能。
@@ -208,9 +209,9 @@ macOS 下原先的 `ioreg | grep -c CGSSessionScreenLockedTime` 降级检测在�
 - `walk-flat` 起始位置：屏幕右侧外，垂直居中
 - `walk-center` 起始位置：屏幕中央
 - 目标位置：屏幕中央
-- `walk-zoom` 缩放：从 0.4 逐渐放大至适应屏幕高度 85% 的比例（最大 5x）
-- `walk-flat` 缩放：固定为适应屏幕高度 85% 的比例（最大 5x）
-- `walk-center` 缩放：固定在屏幕中央，从 0.05 逐渐放大至适应屏幕高度 85% 的比例（最大 5x），同时淡入
+- `walk-zoom` 缩放：从 0.4 逐渐放大至同时满足屏幕高度 85% 与屏幕宽度 90% 的比例（最大 5x）
+- `walk-flat` 缩放：固定为同时满足屏幕高度 85% 与屏幕宽度 90% 的比例（最大 5x）
+- `walk-center` 缩放：固定在屏幕中央，从 0.05 逐渐放大至同时满足屏幕高度 85% 与屏幕宽度 90% 的比例（最大 5x），同时淡入
 - 缓动函数：`1 - Math.pow(1 - progress, 3)` (ease-out cubic)
 - 动画时长：与 walk 视频时长同步
 
@@ -240,7 +241,7 @@ macOS 下原先的 `ioreg | grep -c CGSSessionScreenLockedTime` 降级检测在�
 |------|------|--------|------|------|
 | `thresholdMinutes` | number | 45 | 1-480 | 连续使用多久后触发提醒 |
 | `breakMinutes` | number | 5 | 1-60 | 休息倒计时时长 |
-| `animationMode` | string | `walk-zoom` | `walk-zoom` / `fade-center` / `walk-flat` / `walk-center` | 动画模式（仅激活用户） |
+| `animationMode` | string | `walk-flat` | `walk-zoom` / `fade-center` / `walk-flat` / `walk-center` | 动画模式（仅激活用户） |
 | `walkVideo` | string | `cat-walk.webm` | — | 走路动画文件名 |
 | `idleVideo` | string | `cat-rest.webm` | — | 休息动画文件名 |
 | `customWebmDir` | string | `""` | — | 自定义素材目录路径（仅激活用户） |

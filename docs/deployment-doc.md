@@ -34,10 +34,10 @@ sudo apt install xprintidle
 
 ```bash
 # 下载最新版本
-wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.0.0_amd64.deb
+wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.1.0_amd64.deb
 
 # 安装
-sudo dpkg -i purr-pause_1.0.0_amd64.deb
+sudo dpkg -i purr-pause_1.1.0_amd64.deb
 
 # 如有依赖问题
 sudo apt-get install -f
@@ -83,7 +83,7 @@ rm -rf ~/.config/purr-pause/
 {
   "thresholdMinutes": 45,
   "breakMinutes": 5,
-  "animationMode": "walk-zoom",
+  "animationMode": "walk-flat",
   "customWebmDir": "",
   "walkVideo": "cat-walk.webm",
   "idleVideo": "cat-rest.webm"
@@ -96,7 +96,7 @@ rm -rf ~/.config/purr-pause/
 |------|------|--------|---------|
 | `thresholdMinutes` | 连续使用多久后提醒（分钟） | 45 | 1 ~ 480 |
 | `breakMinutes` | 休息倒计时时长（分钟） | 5 | 1 ~ 60 |
-| `animationMode` | 动画模式（仅激活用户可切换） | `walk-zoom` | `walk-zoom` / `fade-center` / `walk-flat` / `walk-center` |
+| `animationMode` | 动画模式（仅激活用户可切换） | `walk-flat` | `walk-zoom` / `fade-center` / `walk-flat` / `walk-center` |
 | `customWebmDir` | 自定义素材目录（仅激活用户可设置） | `""` | 有效目录路径 |
 | `walkVideo` | 走路动画文件名 | `cat-walk.webm` | 有效文件名 |
 | `idleVideo` | 休息动画文件名 | `cat-rest.webm` | 有效文件名 |
@@ -455,7 +455,7 @@ jobs:
 # 1. 确认 package.json/package-lock.json 版本号已更新
 
 # 2. 推送标签触发构建
-git tag v1.0.0
+git tag v1.1.0
 git push origin --tags
 ```
 

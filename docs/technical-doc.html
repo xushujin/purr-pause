@@ -153,7 +153,7 @@
         <p>胖猫暂停一下（PurrPause） 是一款基于 Electron 的桌面应用程序，运行于 Linux、macOS 和 Windows 系统。当用户连续使用电脑超过设定时间后，一只胖猫会走上屏幕，提醒用户休息。</p>
         <ul>
             <li><strong>应用名称</strong>: 胖猫暂停一下（PurrPause）</li>
-            <li><strong>版本</strong>: 1.0.0</li>
+            <li><strong>版本</strong>: 1.1.0</li>
             <li><strong>许可证</strong>: MIT</li>
             <li><strong>应用 ID</strong>: com.purr-pause.app</li>
         </ul>
@@ -219,6 +219,7 @@
 │   │   ├── cat-walk.webm    # 猫走路动画
 │   │   └── cat-rest.webm    # 猫休息动画
 │   └── images/
+│       ├── logo.png         # 应用 logo 源图
 │       └── tray-icon.png    # 系统托盘图标
 ├── build/
 │   └── icons/               # 应用图标（多平台）
@@ -282,9 +283,9 @@ monitorInterval = setInterval(() =&gt; {
         <p>应用支持四种动画模式，通过配置项 <code>animationMode</code> 控制：</p>
         <table>
             <tr><th>模式</th><th>值</th><th>说明</th></tr>
-            <tr><td>右下角走出</td><td><code>walk-zoom</code></td><td>从右下角走入，边走边放大到屏幕中央（默认）</td></tr>
-            <tr><td>中央淡入</td><td><code>fade-center</code></td><td>在屏幕中央由小变大淡入，最终占屏幕高度 85%</td></tr>
-            <tr><td>右侧走出</td><td><code>walk-flat</code></td><td>以固定大小从右侧走到屏幕中央，不缩放</td></tr>
+            <tr><td>右下角走出</td><td><code>walk-zoom</code></td><td>从右下角走入，边走边放大到屏幕中央</td></tr>
+            <tr><td>中央淡入</td><td><code>fade-center</code></td><td>在屏幕中央由小变大淡入，最终按屏幕宽高自适应</td></tr>
+            <tr><td>右侧走出</td><td><code>walk-flat</code></td><td>以固定大小从右侧走到屏幕中央，不缩放（默认）</td></tr>
             <tr><td>中央走出</td><td><code>walk-center</code></td><td>在屏幕中央播放走路动画，由小到大走出</td></tr>
         </table>
         <p>动画模式切换为激活用户专属功能。</p>
@@ -304,9 +305,9 @@ monitorInterval = setInterval(() =&gt; {
             <li><code>walk-flat</code> 起始位置：屏幕右侧外，垂直居中</li>
             <li><code>walk-center</code> 起始位置：屏幕中央</li>
             <li>目标位置：屏幕中央</li>
-            <li><code>walk-zoom</code> 缩放：从 0.4 逐渐放大至适应屏幕高度 85% 的比例（最大 5x）</li>
-            <li><code>walk-flat</code> 缩放：固定为适应屏幕高度 85% 的比例（最大 5x）</li>
-            <li><code>walk-center</code> 缩放：固定在屏幕中央，从 0.05 逐渐放大至适应屏幕高度 85% 的比例（最大 5x），同时淡入</li>
+            <li><code>walk-zoom</code> 缩放：从 0.4 逐渐放大至同时满足屏幕高度 85% 与屏幕宽度 90% 的比例（最大 5x）</li>
+            <li><code>walk-flat</code> 缩放：固定为同时满足屏幕高度 85% 与屏幕宽度 90% 的比例（最大 5x）</li>
+            <li><code>walk-center</code> 缩放：固定在屏幕中央，从 0.05 逐渐放大至同时满足屏幕高度 85% 与屏幕宽度 90% 的比例（最大 5x），同时淡入</li>
             <li>缓动函数：<code>1 - Math.pow(1 - progress, 3)</code> (ease-out cubic)</li>
             <li>动画时长：与 walk 视频时长同步</li>
         </ul>
@@ -337,7 +338,7 @@ monitorInterval = setInterval(() =&gt; {
             <tr><th>字段</th><th>类型</th><th>默认值</th><th>范围</th><th>说明</th></tr>
             <tr><td><code>thresholdMinutes</code></td><td>number</td><td>45</td><td>1-480</td><td>连续使用多久后触发提醒</td></tr>
             <tr><td><code>breakMinutes</code></td><td>number</td><td>5</td><td>1-60</td><td>休息倒计时时长</td></tr>
-            <tr><td><code>animationMode</code></td><td>string</td><td>walk-zoom</td><td>walk-zoom / fade-center / walk-flat / walk-center</td><td>动画模式（仅激活用户）</td></tr>
+            <tr><td><code>animationMode</code></td><td>string</td><td>walk-flat</td><td>walk-zoom / fade-center / walk-flat / walk-center</td><td>动画模式（仅激活用户）</td></tr>
             <tr><td><code>walkVideo</code></td><td>string</td><td>cat-walk.webm</td><td>—</td><td>走路动画文件名</td></tr>
             <tr><td><code>idleVideo</code></td><td>string</td><td>cat-rest.webm</td><td>—</td><td>休息动画文件名</td></tr>
             <tr><td><code>customWebmDir</code></td><td>string</td><td>""</td><td>—</td><td>自定义素材目录路径（仅激活用户）</td></tr>
