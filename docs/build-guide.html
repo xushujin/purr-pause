@@ -132,15 +132,15 @@ npm install</code></pre>
 <pre><code>npm run build:linux</code></pre>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause_1.1.0_amd64.deb</code></pre>
+<pre><code>dist/purr-pause_1.1.1_amd64.deb</code></pre>
 
 <h3>安装 / 卸载</h3>
 <pre><code># 安装
-sudo dpkg -i dist/purr-pause_1.1.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.1.1_amd64.deb
 
 # 卸载
 sudo dpkg -r purr-pause</code></pre>
-<p>通过 <code>sudo dpkg -i</code> 安装时，deb 的安装后脚本会为执行 sudo 的桌面用户写入 <code>~/.config/autostart/purr-pause.desktop</code>，用于 Ubuntu 登录后自启动。应用内设置页的“开机自动启动”开关读写同一个文件。</p>
+<p>通过 <code>sudo dpkg -i</code> 安装时，deb 的 <code>afterInstall</code> 脚本会先把 <code>/opt/purr-pause/chrome-sandbox</code> 设置为 <code>root:root</code> 和 <code>4755</code>，避免 Electron 启动时报 SUID sandbox 权限错误；随后为执行 sudo 的桌面用户写入 <code>~/.config/autostart/purr-pause.desktop</code>，用于 Ubuntu 登录后自启动。应用内设置页的“开机自动启动”开关读写同一个文件。</p>
 
 <hr>
 
@@ -158,7 +158,7 @@ sudo dpkg -r purr-pause</code></pre>
 <pre><code>npm run build:mac</code></pre>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause-1.1.0.dmg</code></pre>
+<pre><code>dist/purr-pause-1.1.1.dmg</code></pre>
 
 <h3>同时打包 Intel + Apple Silicon 版本</h3>
 <pre><code>npm run build:mac -- --arm64 --x64</code></pre>
@@ -173,7 +173,7 @@ sudo dpkg -r purr-pause</code></pre>
 <pre><code>npm run build:win</code></pre>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause-Setup-1.1.0.exe</code></pre>
+<pre><code>dist/purr-pause-Setup-1.1.1.exe</code></pre>
 
 <div class="warn">未签名的安装包会触发 Windows SmartScreen 警告，用户需要点击"更多信息" → "仍要运行"。</div>
 
@@ -189,8 +189,8 @@ npm run build:win</code></pre>
 <p>推送 tag 后自动在三个平台上构建，无需本地配置多平台环境。</p>
 
 <h3>触发方式</h3>
-<pre><code>git tag v1.1.0
-git push origin v1.1.0</code></pre>
+<pre><code>git tag v1.1.1
+git push origin v1.1.1</code></pre>
 
 <p>构建完成后在 GitHub Actions 页面下载产物。</p>
 

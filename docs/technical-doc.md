@@ -5,7 +5,7 @@
 胖猫暂停一下（PurrPause） 是一款基于 Electron 的桌面应用程序，运行于 Linux、macOS 和 Windows 系统。当用户连续使用电脑超过设定时间后，一只胖猫会走上屏幕，提醒用户休息。
 
 - **应用名称**: 胖猫暂停一下（PurrPause）
-- **版本**: 1.1.0
+- **版本**: 1.1.1
 - **许可证**: MIT
 - **应用 ID**: com.purr-pause.app
 
@@ -443,7 +443,7 @@ machineId = sha256(parts.join('|')).substring(0, 16);
 | Windows | .exe (NSIS) | `npm run build:win` |
 | 全平台 | 全部 | `npm run build:all` |
 
-打包身份使用 ASCII slug `purr-pause`，因此 Linux deb 安装到 `/opt/purr-pause`，可执行文件为 `/opt/purr-pause/purr-pause`；桌面菜单显示名通过 Linux desktop entry 覆盖为“胖猫暂停一下”。Linux deb 包通过 `deb.afterInstall` 执行 `scripts/postinstall.sh`。使用 `sudo dpkg -i` 安装时，脚本会根据 `SUDO_USER` 为真实桌面用户写入 `~/.config/autostart/purr-pause.desktop`；应用内“开机自动启动”开关也会读写同一个用户自启动文件。macOS 和 Windows 继续使用 Electron 的 `setLoginItemSettings()`。
+打包身份使用 ASCII slug `purr-pause`，因此 Linux deb 安装到 `/opt/purr-pause`，可执行文件为 `/opt/purr-pause/purr-pause`；桌面菜单显示名通过 Linux desktop entry 覆盖为“胖猫暂停一下”。Linux deb 包通过 `deb.afterInstall` 执行 `scripts/postinstall.sh`。使用 `sudo dpkg -i` 安装时，脚本会先把 `/opt/purr-pause/chrome-sandbox` 设置为 `root:root` 和 `4755`，满足 Electron SUID sandbox 要求；随后根据 `SUDO_USER` 为真实桌面用户写入 `~/.config/autostart/purr-pause.desktop`。应用内“开机自动启动”开关也会读写同一个用户自启动文件。macOS 和 Windows 继续使用 Electron 的 `setLoginItemSettings()`。
 
 ### 10.2 打包内容
 

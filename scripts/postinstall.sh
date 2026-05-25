@@ -1,10 +1,34 @@
 #!/bin/sh
-# Post-install: enable autostart for the user who installed the deb with sudo.
+# Post-install: configure Electron sandbox and enable autostart for the
+# desktop user who installed the deb with sudo.
 
-APP_EXEC="/opt/purr-pause/purr-pause"
+APP_DIR="${PURR_PAUSE_INSTALL_DIR:-/opt/purr-pause}"
+APP_EXEC="$APP_DIR/purr-pause"
+CHROME_SANDBOX="$APP_DIR/chrome-sandbox"
 TARGET_USER=""
 TARGET_HOME=""
 TARGET_GROUP=""
+
+configure_chrome_sandbox() {
+  if [ ! -e "$CHROME_SANDBOX" ]; then
+    echo "胖猫暂停一下（PurrPause） chrome-sandbox not found at $CHROME_SANDBOX; skipping sandbox permission setup."
+    return 0
+  fi
+
+  if ! chown root:root "$CHROME_SANDBOX"; then
+    echo "胖猫暂停一下（PurrPause） failed to set chrome-sandbox owner: $CHROME_SANDBOX" >&2
+    return 1
+  fi
+
+  if ! chmod 4755 "$CHROME_SANDBOX"; then
+    echo "胖猫暂停一下（PurrPause） failed to set chrome-sandbox mode 4755: $CHROME_SANDBOX" >&2
+    return 1
+  fi
+
+  echo "胖猫暂停一下（PurrPause） chrome-sandbox configured: $CHROME_SANDBOX"
+}
+
+configure_chrome_sandbox || exit 1
 
 if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
   TARGET_USER="$SUDO_USER"

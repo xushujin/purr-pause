@@ -150,14 +150,14 @@ sudo apt install xprintidle
         <h2>2. 安装</h2>
         <h3>2.1 通过 .deb 包安装</h3>
 <pre><code># 下载最新版本
-wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.1.0_amd64.deb
+wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.1.1_amd64.deb
 
 # 安装
-sudo dpkg -i purr-pause_1.1.0_amd64.deb
+sudo dpkg -i purr-pause_1.1.1_amd64.deb
 
 # 如有依赖问题
 sudo apt-get install -f</code></pre>
-        <p>使用 <code>sudo dpkg -i</code> 安装时，安装后脚本会为执行 sudo 的桌面用户创建 <code>~/.config/autostart/purr-pause.desktop</code>，下次登录桌面后自动启动。</p>
+        <p>使用 <code>sudo dpkg -i</code> 安装时，安装后脚本会先修正 <code>/opt/purr-pause/chrome-sandbox</code> 的所有权和权限（<code>root:root</code>、<code>4755</code>），避免 Electron 启动时报 SUID sandbox 权限错误；随后为执行 sudo 的桌面用户创建 <code>~/.config/autostart/purr-pause.desktop</code>，下次登录桌面后自动启动。</p>
 
         <h3>2.2 验证安装</h3>
 <pre><code># 检查是否安装成功
@@ -495,7 +495,7 @@ jobs:
 <pre><code># 1. 确认 package.json/package-lock.json 版本号已更新
 
 # 2. 推送标签触发构建
-git tag v1.1.0
+git tag v1.1.1
 git push origin --tags</code></pre>
 
         <h2>11. 数据目录总览</h2>
