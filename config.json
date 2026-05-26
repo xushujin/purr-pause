@@ -1,5 +1,5 @@
 {
   "thresholdMinutes": 45,
   "breakMinutes": 5,
-  "animationMode": "walk-flat"
+  "animationMode": "walk-center"
 }
