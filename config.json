@@ -1,5 +1,6 @@
 {
   "thresholdMinutes": 45,
   "breakMinutes": 5,
-  "animationMode": "walk-center"
+  "animationMode": "walk-center",
+  "messageNotifyVideo": "notify-rocket.webm"
 }

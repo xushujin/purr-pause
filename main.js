@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, powerMonitor } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { execFileSync, execFile } = require('child_process');
 const fs = require('fs');
 const license = require('./lib/license');
@@ -29,12 +30,14 @@ const RESOURCES_PATH = IS_PACKAGED
 
 const USER_CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config.json');
-const DEFAULT_CONFIG = { thresholdMinutes: 45, breakMinutes: 5, customWebmDir: '', walkVideo: 'cat-walk.webm', idleVideo: 'cat-rest.webm', animationMode: 'walk-center' };
+const DEFAULT_CONFIG = { thresholdMinutes: 45, breakMinutes: 5, customWebmDir: '', walkVideo: 'cat-walk.webm', idleVideo: 'cat-rest.webm', animationMode: 'walk-center', messageNotifyVideo: 'notify-rocket.webm' };
 let config = { ...DEFAULT_CONFIG };
 let wins = [];
 let settingsWin = null;
 let activationWin = null;
 let rulesWin = null;
+let rocketDemoWin = null;
+let rocketDemoTimer = null;
 let tray = null;
 let activeSeconds = 0;
 let monitorInterval = null;
@@ -45,6 +48,16 @@ let isPaused = false;
 let pauseTimer = null;
 let snoozeCount = 0;
 let snoozeThreshold = 0;
+
+const ROCKET_DEMO_SIZE = 240;
+const ROCKET_DEMO_DURATION_MS = 7000;
+const ROCKET_DEMO_LABEL = '绘家科技';
+
+function isSafeAssetFilename(filename) {
+  if (typeof filename !== 'string') return false;
+  const value = filename.trim();
+  return !!value && !/[\\/]/.test(value) && value === path.basename(value);
+}
 
 function quoteDesktopExecPart(value) {
   return '"' + String(value).replace(/(["\\$`])/g, '\\$1') + '"';
@@ -432,6 +445,28 @@ function getVideoPaths() {
   };
 }
 
+function findMediaFile(filename) {
+  if (!isSafeAssetFilename(filename)) return null;
+
+  const customDir = config.customWebmDir || '';
+  const userDir = path.join(app.getPath('userData'), 'webm');
+  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+  const builtinDir = path.join(RESOURCES_PATH, 'webm');
+
+  const searchDirs = [customDir, userDir, builtinDir].filter(Boolean);
+  for (const dir of searchDirs) {
+    const candidate = path.join(dir, filename);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function getRocketMediaUrl(filename) {
+  const mediaPath = findMediaFile(filename || DEFAULT_CONFIG.messageNotifyVideo);
+  return mediaPath ? pathToFileURL(mediaPath).toString() : '';
+}
+
 function triggerCat(manual) {
   if (isOverlayShowing) return;
   if (!manual && Date.now() - lastDismissTime < 60000) return;
@@ -482,6 +517,107 @@ function triggerCat(manual) {
     });
 
     wins.push(w);
+  });
+}
+
+function closeRocketDemo() {
+  if (rocketDemoTimer) {
+    clearTimeout(rocketDemoTimer);
+    rocketDemoTimer = null;
+  }
+  if (rocketDemoWin && !rocketDemoWin.isDestroyed()) {
+    const win = rocketDemoWin;
+    rocketDemoWin = null;
+    win.hide();
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.destroy();
+    }, 30);
+    return;
+  }
+  rocketDemoWin = null;
+}
+
+function scheduleRocketDemoClose(win) {
+  if (rocketDemoTimer) clearTimeout(rocketDemoTimer);
+  rocketDemoTimer = setTimeout(() => {
+    if (win && !win.isDestroyed()) closeRocketDemo();
+  }, ROCKET_DEMO_DURATION_MS + 160);
+}
+
+function triggerRocketDemo(options = {}) {
+  closeRocketDemo();
+
+  const display = screen.getPrimaryDisplay();
+  const area = display.workArea;
+  const margin = 24;
+  const label = String(options.label || ROCKET_DEMO_LABEL);
+  const count = String(options.count || 3);
+  const mediaUrl = options.mediaUrl || getRocketMediaUrl(config.messageNotifyVideo);
+  const startX = Math.round(Math.max(area.x + margin, area.x + area.width - ROCKET_DEMO_SIZE - margin));
+  const startY = Math.round(Math.max(area.y + margin, area.y + area.height - ROCKET_DEMO_SIZE - margin));
+  const endY = Math.round(Math.max(area.y + margin, area.y + area.height * 0.14));
+  const localStartY = Math.max(0, startY - endY);
+  const pathHeight = Math.max(ROCKET_DEMO_SIZE, localStartY + ROCKET_DEMO_SIZE);
+
+  rocketDemoWin = new BrowserWindow({
+    x: startX,
+    y: endY,
+    width: ROCKET_DEMO_SIZE,
+    height: pathHeight,
+    transparent: true,
+    backgroundColor: '#00000000',
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    show: false,
+    paintWhenInitiallyHidden: true,
+    resizable: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  });
+
+  const win = rocketDemoWin;
+  win.setVisibleOnAllWorkspaces(true);
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.setBackgroundColor('#00000000');
+  win.loadFile(path.join(__dirname, 'renderer', 'rocket-demo.html'), {
+    query: {
+      label,
+      count,
+      mediaUrl,
+      startY: String(localStartY),
+      endY: '0',
+      durationMs: String(ROCKET_DEMO_DURATION_MS)
+    }
+  });
+
+  win.webContents.on('did-finish-load', () => {
+    if (!win || win.isDestroyed()) return;
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setBackgroundColor('#00000000');
+    win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))))')
+      .catch(() => {})
+      .finally(() => {
+        if (!win || win.isDestroyed()) return;
+        win.showInactive();
+        win.moveTop();
+        scheduleRocketDemoClose(win);
+      });
+  });
+
+  win.on('closed', () => {
+    if (rocketDemoWin === win) {
+      if (rocketDemoTimer) {
+        clearTimeout(rocketDemoTimer);
+        rocketDemoTimer = null;
+      }
+      rocketDemoWin = null;
+    }
   });
 }
 
@@ -576,6 +712,7 @@ function rebuildTrayMenu() {
     { label: '设置', click: () => openSettings() },
     { label: '计时规则', click: () => openRules() },
     { label: '查看日志', click: () => { require('electron').shell.openPath(logger.getLogPath()); } },
+    { label: '小火箭演示', click: () => triggerRocketDemo() },
     { label: '立即测试', click: () => triggerCat(true) },
     { label: '重置计时', click: () => { activeSeconds = 0; lastRemainingMins = -1; rebuildTrayMenu(); logger.info('手动重置计时'); } },
     { type: 'separator' },
@@ -617,16 +754,19 @@ function generateReadmeInDir(dir) {
       '需要提供两个文件：',
       '  - cat-walk.webm  → 猫走路动画（从右往左走，播放一次）',
       '  - cat-rest.webm  → 猫躺下/休息动画（循环播放）',
+      '  - notify-rocket.webm → 小火箭消息提醒动画（可选，找不到时使用内置 SVG）',
       '',
       '如需使用其他文件名，请在设置中的 config.json 添加：',
       '  "walkVideo": "你的走路文件.webm"',
       '  "idleVideo": "你的躺下文件.webm"',
+      '  "messageNotifyVideo": "你的小火箭文件.webm"',
       '',
       '制作建议：',
       '  - 使用 FFmpeg 导出带 Alpha 通道的 WebM：',
       '    ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 2M output.webm',
       '  - 走路动画建议 2~4 秒，猫从画面右侧走到左侧',
       '  - 休息动画可以是猫趴着、打呼噜等循环动作',
+      '  - 小火箭动画建议 240x240 左右，透明背景，火箭主体保持在画面中间',
       ''
     ].join('\n'));
   } catch (e) {
@@ -760,6 +900,10 @@ app.whenReady().then(() => {
 
   createTray();
 
+  if (process.argv.includes('--rocket-demo')) {
+    setTimeout(() => triggerRocketDemo(), 800);
+  }
+
   const licenseStatus = license.checkStatus(app.getPath('userData'));
   logger.info('许可证状态: ' + licenseStatus.status + ', 类型: ' + (licenseStatus.type || ''));
   if (licenseStatus.status === 'expired') {
@@ -811,6 +955,10 @@ ipcMain.on('save-config', (event, newConfig) => {
   }
   if (newConfig.autoLaunch !== undefined) {
     setAutoLaunchEnabled(!!newConfig.autoLaunch);
+  }
+  if (newConfig.messageNotifyVideo !== undefined) {
+    const filename = String(newConfig.messageNotifyVideo || '').trim() || DEFAULT_CONFIG.messageNotifyVideo;
+    config.messageNotifyVideo = isSafeAssetFilename(filename) ? filename : DEFAULT_CONFIG.messageNotifyVideo;
   }
   if (newConfig.customWebmDir !== undefined) {
     const licenseStatus = license.checkStatus(app.getPath('userData'));
@@ -934,4 +1082,8 @@ ipcMain.on('skip-activation', () => {
 
 app.on('window-all-closed', () => {
   // Keep app running — managed by tray
+});
+
+app.on('before-quit', () => {
+  closeRocketDemo();
 });

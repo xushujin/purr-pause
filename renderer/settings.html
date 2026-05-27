@@ -42,7 +42,8 @@
             color: #8b5e34;
             margin-top: 2px;
         }
-        .field input[type="number"] {
+        .field input[type="number"],
+        .field input[type="text"] {
             width: 70px;
             padding: 6px 10px;
             border: 1px solid #f4a460;
@@ -51,6 +52,10 @@
             text-align: center;
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field input[type="text"] {
+            width: 150px;
+            text-align: left;
         }
         .field input:focus {
             border-color: #e07b20;
@@ -169,6 +174,13 @@
         </div>
         <div class="field">
             <div>
+                <label>小火箭素材</label>
+                <div class="hint">WebM 文件名，找不到时使用内置火箭</div>
+            </div>
+            <div><input type="text" id="messageNotifyVideo" placeholder="notify-rocket.webm"></div>
+        </div>
+        <div class="field">
+            <div>
                 <label>开机自动启动</label>
                 <div class="hint">系统启动时自动运行 胖猫暂停一下（PurrPause）</div>
             </div>
@@ -189,6 +201,7 @@
         const breakInput = document.getElementById('breakMinutes');
         const animationModeInput = document.getElementById('animationMode');
         const autoLaunchInput = document.getElementById('autoLaunch');
+        const messageNotifyVideoInput = document.getElementById('messageNotifyVideo');
         const statusEl = document.getElementById('status');
         const webmDirHint = document.getElementById('webmDirHint');
         let customWebmDir = '';
@@ -198,6 +211,7 @@
             thresholdInput.value = config.thresholdMinutes || 45;
             breakInput.value = config.breakMinutes || 5;
             animationModeInput.value = config.animationMode || 'walk-center';
+            messageNotifyVideoInput.value = config.messageNotifyVideo || 'notify-rocket.webm';
             customWebmDir = config.customWebmDir || '';
             isActivated = config._isActivated || false;
             autoLaunchInput.checked = config._autoLaunch || false;
@@ -248,6 +262,7 @@
 
             thresholdInput.classList.remove('invalid');
             breakInput.classList.remove('invalid');
+            messageNotifyVideoInput.classList.remove('invalid');
 
             if (!threshold || threshold < 1 || threshold > 480) {
                 thresholdInput.classList.add('invalid');
@@ -257,15 +272,21 @@
                 breakInput.classList.add('invalid');
                 valid = false;
             }
+            const messageNotifyVideo = messageNotifyVideoInput.value.trim() || 'notify-rocket.webm';
+            if (!messageNotifyVideo || /[\\/]/.test(messageNotifyVideo)) {
+                messageNotifyVideoInput.classList.add('invalid');
+                valid = false;
+            }
             return valid;
         }
 
         thresholdInput.addEventListener('input', () => thresholdInput.classList.remove('invalid'));
         breakInput.addEventListener('input', () => breakInput.classList.remove('invalid'));
+        messageNotifyVideoInput.addEventListener('input', () => messageNotifyVideoInput.classList.remove('invalid'));
 
         document.getElementById('saveBtn').addEventListener('click', () => {
             if (!validate()) {
-                showStatus('请输入有效的时间（屏幕时间 1-480 分钟，休息时长 1-60 分钟）', 'error');
+                showStatus('请检查时间和素材文件名（文件名不能包含路径）', 'error');
                 return;
             }
             const newConfig = {
@@ -273,6 +294,7 @@
                 breakMinutes: parseInt(breakInput.value),
                 animationMode: animationModeInput.value,
                 customWebmDir: customWebmDir,
+                messageNotifyVideo: messageNotifyVideoInput.value.trim() || 'notify-rocket.webm',
                 autoLaunch: autoLaunchInput.checked
             };
             window.electronAPI.saveConfig(newConfig);

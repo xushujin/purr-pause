@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "rocket-demo": "electron . --rocket-demo",
     "build": "electron-builder",
     "build:linux": "electron-builder --linux deb",
     "build:mac": "electron-builder --mac",
