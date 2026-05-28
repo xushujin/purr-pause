@@ -13,6 +13,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('load-config', (event, config) => callback(config));
   },
   saveConfig: (config) => ipcRenderer.send('save-config', config),
+  downloadMessageApiSpec: () => ipcRenderer.send('download-message-api-spec'),
+  onDownloadMessageApiSpecResult: (callback) => {
+    ipcRenderer.removeAllListeners('download-message-api-spec-result');
+    ipcRenderer.on('download-message-api-spec-result', (event, result) => callback(result));
+  },
+  onSaveConfigResult: (callback) => {
+    ipcRenderer.removeAllListeners('save-config-result');
+    ipcRenderer.on('save-config-result', (event, result) => callback(result));
+  },
   closeSettings: () => ipcRenderer.send('close-settings'),
   pickWebmDir: () => ipcRenderer.send('pick-webm-dir'),
   onWebmDirPicked: (callback) => {
@@ -28,5 +37,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLicenseStatus: (callback) => {
     ipcRenderer.removeAllListeners('license-status');
     ipcRenderer.on('license-status', (event, status) => callback(status));
-  }
+  },
+  onMessagesState: (callback) => {
+    ipcRenderer.removeAllListeners('messages-state');
+    ipcRenderer.on('messages-state', (event, state) => callback(state));
+  },
+  refreshMessages: () => ipcRenderer.send('refresh-messages'),
+  openMessageTarget: (id) => ipcRenderer.send('open-message-target', id),
+  dismissMessageNotification: () => ipcRenderer.send('dismiss-message-notification')
 });

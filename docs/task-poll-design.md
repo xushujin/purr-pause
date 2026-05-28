@@ -1,6 +1,6 @@
 # 消息提醒/待办通知模块设计
 
-> 状态：规划草案，当前代码尚未实现本模块。本文档用于约束后续实现范围，并作为第三方接口接入规范的初稿。
+> 状态：MVP 已实现。本文档继续作为第三方接口接入规范和后续迭代约束。
 
 ## 当前结论
 
@@ -13,6 +13,14 @@
 - 应用内提供“待办消息列表”窗口；点击消息项打开第三方提供的 `targetUrl`。
 - 待办列表需要按第三方来源做明显区分：每条消息携带来源标识、来源名称和可选颜色，客户端渲染为来源标签。
 - 客户端只保留有限数量的消息快照；超过上限时丢弃旧消息，避免列表和内存无限增长。
+
+## 当前实现状态
+
+- 已新增 `lib/message-notify.js`，负责轮询、差异检测、角标状态、轻量动画、待办列表窗口生命周期和退避。
+- 已新增 `renderer/message-list.html`，用于展示待办列表、刷新状态、来源标签和跳转入口。
+- 已复用 `renderer/rocket-demo.html` 作为轻量消息提醒动画窗口。
+- 已在 `main.js`、`preload.js`、`renderer/message-settings.html`、`config.json` 中接入默认配置、独立消息提醒设置窗口、IPC、托盘入口、保存校验和退出清理。
+- 第一版仍不做服务端推送、已读回写、本地持久化完整消息内容和系统通知中心集成。
 
 ## 背景和目标
 
@@ -29,8 +37,8 @@ PurrPause 当前主要提供休息提醒。新模块用于连接客户已有的�
 
 ### 做
 
-- 设置页提供“消息提醒”总开关。
-- 设置页配置第三方服务基础地址、认证信息和轮询间隔。
+- 独立“消息提醒设置”窗口提供“消息提醒”总开关。
+- 独立“消息提醒设置”窗口配置第三方服务基础地址、认证信息和轮询间隔。
 - 轮询“待办消息总数”接口。
 - 总数或变更标识变化后拉取“待办消息列表”接口。
 - 检测到新增待办时显示数量角标，并播放一次提醒动画。
@@ -208,6 +216,7 @@ Accept: application/json
   "messagePollInterval": 60,
   "messageListLimit": 50,
   "messageMaxCacheItems": 99,
+  "messageNotifyDir": "",
   "messageNotifyVideo": "notify-rocket.webm",
   "messageNotifyAnimation": "rocket-corner"
 }
@@ -221,6 +230,7 @@ Accept: application/json
 | `messagePollInterval` | number | `60` | 10-3600 秒 |
 | `messageListLimit` | number | `50` | 1-100 |
 | `messageMaxCacheItems` | number | `99` | 10-99，本地最多保留的消息数量 |
+| `messageNotifyDir` | string | `""` | 小火箭素材目录；保存后自动生成 `purr-pause-消息提醒素材说明.txt`；为空时依次查找通用素材目录、用户默认 webm 目录和内置目录 |
 | `messageNotifyVideo` | string | `notify-rocket.webm` | 文件名，不允许路径分隔符 |
 | `messageNotifyAnimation` | string | `rocket-corner` | 预设动画模式 |
 
@@ -228,14 +238,21 @@ Accept: application/json
 
 ## 用户体验设计
 
-### 设置页
+### 消息提醒设置窗口
 
-在现有设置页增加“消息提醒”分组：
+托盘菜单提供独立入口：
+
+- `消息提醒设置`
+
+点击后打开独立设置窗口，不混入休息提醒的通用设置窗口。
 
 - `启用消息提醒`：总开关。
 - `服务地址`：第三方服务 Base URL，例如 `https://oa.example.com`。
+- `接口规范`：下载独立 Markdown 文件 `PurrPause-消息提醒接口规范-v1.md`，只包含第三方接口规范。
 - `请求头`：JSON textarea，例如 `{"Authorization":"Bearer xxx"}`。
 - `轮询间隔`：秒，默认 60。
+- `小火箭素材目录`：可选目录，放置 `notify-rocket.webm`。
+- 选择小火箭素材目录并保存后，客户端在目录下生成 `purr-pause-消息提醒素材说明.txt`。
 - `提醒动画素材`：视频文件名或素材选择。
 - `测试连接`：可选按钮，用于调用 count 接口并展示结果。
 
@@ -318,10 +335,11 @@ Accept: application/json
 ```
 lib/message-notify.js        # 轮询、差异检测、角标状态、通知生命周期
 renderer/message-list.html   # 待办消息列表窗口
+renderer/message-settings.html # 消息提醒独立设置窗口
 renderer/notification.html   # 小火箭/轻量提醒动画窗口
 preload.js                   # 增加消息列表和通知 IPC
 main.js                      # 生命周期、托盘入口、配置集成
-renderer/settings.html       # 设置 UI
+renderer/settings.html       # 通用休息提醒设置 UI
 config.json                  # 默认配置
 assets/webm/notify-rocket.webm # 可选内置示例素材
 ```
@@ -484,9 +502,10 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 2. `DEFAULT_CONFIG` 添加消息提醒配置字段。
 3. `app.whenReady` 中初始化消息模块。
 4. 托盘菜单增加 `待办消息（N）`，点击打开消息列表。
-5. `save-config` IPC 校验并保存消息提醒配置，然后调用 `messageNotify.updateConfig(config)`。
-6. `before-quit` 调用 `messageNotify.destroy()`。
-7. 消息模块通过回调触发 `rebuildTrayMenu()` 更新角标。
+5. 托盘菜单增加 `消息提醒设置`，点击打开独立消息提醒设置窗口。
+6. `save-config` IPC 校验并保存消息提醒配置，然后调用 `messageNotify.updateConfig(config)`。
+7. `before-quit` 调用 `messageNotify.destroy()`。
+8. 消息模块通过回调触发 `rebuildTrayMenu()` 更新角标。
 
 ## 实施拆分
 
@@ -494,7 +513,7 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 
 - 固化本文档中的第三方接口规范。
 - 更新默认配置字段。
-- 设置页增加“消息提醒”分组。
+- 新建独立消息提醒设置窗口。
 - 支持开启/关闭、Base URL、请求头、轮询间隔、动画素材。
 
 验收：配置可保存；关闭开关时不启动轮询。
@@ -549,14 +568,15 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 8. 动画播放期间鼠标点击能穿透到后方窗口。
 9. 托盘菜单显示 `待办消息（N）`。
 10. 点击托盘入口打开待办消息列表。
-11. 不同 `source.id` 的消息显示不同来源标签和稳定颜色。
-12. 第三方未返回 `source.color` 时，客户端自动分配稳定颜色。
-13. 消息数量超过 `messageMaxCacheItems` 后，旧消息被丢弃，列表只显示最近 N 条。
-14. 点击列表项打开第三方 `targetUrl`。
-15. 关闭消息提醒开关后停止轮询、关闭动画窗口、隐藏角标。
-16. 第三方接口连续失败后进入退避。
-17. 休息提醒显示时不播放消息动画，但角标仍更新。
-18. 休息提醒结束后可以合并播放一次消息提醒动画。
+11. 点击托盘 `消息提醒设置` 打开独立消息提醒设置窗口。
+12. 不同 `source.id` 的消息显示不同来源标签和稳定颜色。
+13. 第三方未返回 `source.color` 时，客户端自动分配稳定颜色。
+14. 消息数量超过 `messageMaxCacheItems` 后，旧消息被丢弃，列表只显示最近 N 条。
+15. 点击列表项打开第三方 `targetUrl`。
+16. 关闭消息提醒开关后停止轮询、关闭动画窗口、隐藏角标。
+17. 第三方接口连续失败后进入退避。
+18. 休息提醒显示时不播放消息动画，但角标仍更新。
+19. 休息提醒结束后可以合并播放一次消息提醒动画。
 
 ## 待确认决策
 

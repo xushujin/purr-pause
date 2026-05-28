@@ -25,11 +25,21 @@
             padding: 16px 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
+        .section + .section { margin-top: 14px; }
+        h2 {
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+            color: #6b3a00;
+        }
         .field {
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 10px 0;
+            gap: 14px;
+        }
+        .field.column {
+            display: block;
         }
         .field + .field { border-top: 1px solid rgba(244,164,96,0.2); }
         .field label {
@@ -43,7 +53,8 @@
             margin-top: 2px;
         }
         .field input[type="number"],
-        .field input[type="text"] {
+        .field input[type="text"],
+        textarea {
             width: 70px;
             padding: 6px 10px;
             border: 1px solid #f4a460;
@@ -57,7 +68,22 @@
             width: 150px;
             text-align: left;
         }
-        .field input:focus {
+        .field input.wide-input,
+        textarea {
+            width: 100%;
+            margin-top: 8px;
+            text-align: left;
+        }
+        textarea {
+            min-height: 72px;
+            resize: vertical;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.82rem;
+            line-height: 1.35;
+            user-select: text;
+        }
+        .field input:focus,
+        textarea:focus {
             border-color: #e07b20;
             box-shadow: 0 0 0 3px rgba(244,164,96,0.3);
         }
@@ -113,6 +139,10 @@
             color: #dc2626;
         }
         .field input.invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+        textarea.invalid {
             border-color: #ef4444;
             box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
         }
@@ -174,13 +204,6 @@
         </div>
         <div class="field">
             <div>
-                <label>小火箭素材</label>
-                <div class="hint">WebM 文件名，找不到时使用内置火箭</div>
-            </div>
-            <div><input type="text" id="messageNotifyVideo" placeholder="notify-rocket.webm"></div>
-        </div>
-        <div class="field">
-            <div>
                 <label>开机自动启动</label>
                 <div class="hint">系统启动时自动运行 胖猫暂停一下（PurrPause）</div>
             </div>
@@ -201,7 +224,6 @@
         const breakInput = document.getElementById('breakMinutes');
         const animationModeInput = document.getElementById('animationMode');
         const autoLaunchInput = document.getElementById('autoLaunch');
-        const messageNotifyVideoInput = document.getElementById('messageNotifyVideo');
         const statusEl = document.getElementById('status');
         const webmDirHint = document.getElementById('webmDirHint');
         let customWebmDir = '';
@@ -211,7 +233,6 @@
             thresholdInput.value = config.thresholdMinutes || 45;
             breakInput.value = config.breakMinutes || 5;
             animationModeInput.value = config.animationMode || 'walk-center';
-            messageNotifyVideoInput.value = config.messageNotifyVideo || 'notify-rocket.webm';
             customWebmDir = config.customWebmDir || '';
             isActivated = config._isActivated || false;
             autoLaunchInput.checked = config._autoLaunch || false;
@@ -228,6 +249,14 @@
                 animationModeInput.disabled = true;
                 animationModeInput.style.opacity = '0.4';
                 animationModeInput.style.cursor = 'not-allowed';
+            }
+        });
+
+        window.electronAPI.onSaveConfigResult((result) => {
+            if (result && result.success) {
+                showStatus('保存成功 ✓', 'success');
+            } else {
+                showStatus((result && result.error) || '保存失败', 'error');
             }
         });
 
@@ -262,7 +291,6 @@
 
             thresholdInput.classList.remove('invalid');
             breakInput.classList.remove('invalid');
-            messageNotifyVideoInput.classList.remove('invalid');
 
             if (!threshold || threshold < 1 || threshold > 480) {
                 thresholdInput.classList.add('invalid');
@@ -272,21 +300,15 @@
                 breakInput.classList.add('invalid');
                 valid = false;
             }
-            const messageNotifyVideo = messageNotifyVideoInput.value.trim() || 'notify-rocket.webm';
-            if (!messageNotifyVideo || /[\\/]/.test(messageNotifyVideo)) {
-                messageNotifyVideoInput.classList.add('invalid');
-                valid = false;
-            }
             return valid;
         }
 
         thresholdInput.addEventListener('input', () => thresholdInput.classList.remove('invalid'));
         breakInput.addEventListener('input', () => breakInput.classList.remove('invalid'));
-        messageNotifyVideoInput.addEventListener('input', () => messageNotifyVideoInput.classList.remove('invalid'));
 
         document.getElementById('saveBtn').addEventListener('click', () => {
             if (!validate()) {
-                showStatus('请检查时间和素材文件名（文件名不能包含路径）', 'error');
+                showStatus('请检查时间设置', 'error');
                 return;
             }
             const newConfig = {
@@ -294,11 +316,9 @@
                 breakMinutes: parseInt(breakInput.value),
                 animationMode: animationModeInput.value,
                 customWebmDir: customWebmDir,
-                messageNotifyVideo: messageNotifyVideoInput.value.trim() || 'notify-rocket.webm',
                 autoLaunch: autoLaunchInput.checked
             };
             window.electronAPI.saveConfig(newConfig);
-            showStatus('保存成功 ✓', 'success');
         });
 
         document.getElementById('cancelBtn').addEventListener('click', () => {

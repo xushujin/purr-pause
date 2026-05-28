@@ -61,6 +61,7 @@
       "preload.js",
       "lib/**/*",
       "renderer/**/*",
+      "docs/message-api-spec.md",
       "config.json",
       "!tools"
     ],

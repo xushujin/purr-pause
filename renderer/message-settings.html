@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>消息提醒设置</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(160deg, #f4a460, #ff8c42);
+            color: #3d2200;
+            padding: 24px;
+            user-select: none;
+            overflow-y: auto;
+        }
+        h1 {
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.15);
+        }
+        .section {
+            background: rgba(255,255,255,0.92);
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .field {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            gap: 14px;
+        }
+        .field.column {
+            display: block;
+        }
+        .field + .field { border-top: 1px solid rgba(244,164,96,0.2); }
+        .field label {
+            font-size: 0.9rem;
+            color: #3d2200;
+            font-weight: 500;
+        }
+        .field .hint {
+            font-size: 0.75rem;
+            color: #8b5e34;
+            margin-top: 2px;
+        }
+        .field input[type="number"],
+        .field input[type="text"],
+        textarea {
+            width: 70px;
+            padding: 6px 10px;
+            border: 1px solid #f4a460;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field input[type="text"] {
+            width: 150px;
+            text-align: left;
+        }
+        .field input.wide-input,
+        textarea {
+            width: 100%;
+            margin-top: 8px;
+            text-align: left;
+        }
+        textarea {
+            min-height: 72px;
+            resize: vertical;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.82rem;
+            line-height: 1.35;
+            user-select: text;
+        }
+        .field input:focus,
+        textarea:focus {
+            border-color: #e07b20;
+            box-shadow: 0 0 0 3px rgba(244,164,96,0.3);
+        }
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        button {
+            padding: 8px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        button:active { transform: scale(0.97); }
+        .btn-save {
+            background: #fff;
+            color: #e07b20;
+            font-weight: 700;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .btn-cancel {
+            background: rgba(255,255,255,0.5);
+            color: #6b3a00;
+        }
+        .status {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 8px 22px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 100;
+            pointer-events: none;
+        }
+        .status.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .status.success {
+            background: rgba(34, 197, 94, 0.15);
+            color: #16a34a;
+        }
+        .status.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+        .field input.invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+        textarea.invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+        .btn-pick, .btn-clear {
+            padding: 4px 12px;
+            border: 1px solid #f4a460;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            background: #fff;
+            color: #8b5e34;
+            cursor: pointer;
+        }
+        .btn-clear {
+            border-color: #ddd;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>消息提醒设置</h1>
+    <div class="section">
+        <div class="field">
+            <div>
+                <label>启用消息提醒</label>
+                <div class="hint">关闭后停止轮询并隐藏待办角标</div>
+            </div>
+            <input type="checkbox" id="messageNotifyEnabled" style="width:18px;height:18px;cursor:pointer;">
+        </div>
+        <div class="field column">
+            <label>服务地址</label>
+            <div class="hint">第三方服务 Base URL，例如 https://oa.example.com</div>
+            <input type="text" id="messageApiBaseUrl" class="wide-input" placeholder="https://oa.example.com">
+        </div>
+        <div class="field">
+            <div>
+                <label>接口规范</label>
+                <div class="hint">下载第三方系统对接用的 Markdown 接口文档</div>
+            </div>
+            <button class="btn-pick" id="downloadApiSpecBtn">下载</button>
+        </div>
+        <div class="field column">
+            <label>请求头</label>
+            <div class="hint">JSON 对象，例如 {"Authorization":"Bearer xxx"}</div>
+            <textarea id="messageAuthHeaders" spellcheck="false" placeholder='{"Authorization":"Bearer xxx"}'></textarea>
+        </div>
+        <div class="field">
+            <div>
+                <label>轮询间隔</label>
+                <div class="hint">调用 count 接口的间隔，10-3600 秒</div>
+            </div>
+            <div><input type="number" id="messagePollInterval" min="10" max="3600"> 秒</div>
+        </div>
+        <div class="field">
+            <div>
+                <label>列表显示数量</label>
+                <div class="hint">待办窗口一次显示的条数，1-100</div>
+            </div>
+            <div><input type="number" id="messageListLimit" min="1" max="100"> 条</div>
+        </div>
+        <div class="field">
+            <div>
+                <label>本地缓存上限</label>
+                <div class="hint">只保留最近的待办快照，10-99 条</div>
+            </div>
+            <div><input type="number" id="messageMaxCacheItems" min="10" max="99"> 条</div>
+        </div>
+        <div class="field">
+            <div style="flex:1;min-width:0;">
+                <label>小火箭素材目录</label>
+                <div class="hint" id="messageNotifyDirHint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">使用默认目录</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+                <button class="btn-pick" id="pickNotifyDirBtn">选择</button>
+                <button class="btn-clear" id="clearNotifyDirBtn">重置</button>
+            </div>
+        </div>
+        <div class="field">
+            <div>
+                <label>小火箭素材</label>
+                <div class="hint">WebM 文件名，找不到时使用内置火箭</div>
+            </div>
+            <input type="text" id="messageNotifyVideo" placeholder="notify-rocket.webm">
+        </div>
+    </div>
+    <div class="actions">
+        <button class="btn-cancel" id="cancelBtn">取消</button>
+        <button class="btn-save" id="saveBtn">保存</button>
+    </div>
+    <p class="status" id="status"></p>
+
+    <script>
+        const enabledInput = document.getElementById('messageNotifyEnabled');
+        const baseUrlInput = document.getElementById('messageApiBaseUrl');
+        const headersInput = document.getElementById('messageAuthHeaders');
+        const pollIntervalInput = document.getElementById('messagePollInterval');
+        const listLimitInput = document.getElementById('messageListLimit');
+        const maxCacheItemsInput = document.getElementById('messageMaxCacheItems');
+        const notifyVideoInput = document.getElementById('messageNotifyVideo');
+        const notifyDirHint = document.getElementById('messageNotifyDirHint');
+        const statusEl = document.getElementById('status');
+        let messageNotifyDir = '';
+
+        window.electronAPI.onLoadConfig((config) => {
+            enabledInput.checked = !!config.messageNotifyEnabled;
+            baseUrlInput.value = config.messageApiBaseUrl || '';
+            headersInput.value = config.messageAuthHeaders || '{}';
+            pollIntervalInput.value = config.messagePollInterval || 60;
+            listLimitInput.value = config.messageListLimit || 50;
+            maxCacheItemsInput.value = config.messageMaxCacheItems || 99;
+            messageNotifyDir = config.messageNotifyDir || '';
+            notifyDirHint.textContent = messageNotifyDir || '使用默认目录';
+            notifyVideoInput.value = config.messageNotifyVideo || 'notify-rocket.webm';
+        });
+
+        window.electronAPI.onSaveConfigResult((result) => {
+            if (result && result.success) {
+                showStatus('保存成功 ✓', 'success');
+            } else {
+                showStatus((result && result.error) || '保存失败', 'error');
+            }
+        });
+
+        window.electronAPI.onDownloadMessageApiSpecResult((result) => {
+            if (result && result.success) {
+                showStatus('接口规范已下载 ✓', 'success');
+            } else if (result && result.canceled) {
+                return;
+            } else {
+                showStatus((result && result.error) || '下载失败', 'error');
+            }
+        });
+
+        function showStatus(msg, type) {
+            statusEl.textContent = msg;
+            statusEl.className = 'status ' + type + ' show';
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, 2500);
+        }
+
+        function clearInvalid() {
+            baseUrlInput.classList.remove('invalid');
+            headersInput.classList.remove('invalid');
+            pollIntervalInput.classList.remove('invalid');
+            listLimitInput.classList.remove('invalid');
+            maxCacheItemsInput.classList.remove('invalid');
+            notifyVideoInput.classList.remove('invalid');
+        }
+
+        function validate() {
+            clearInvalid();
+            let valid = true;
+            const baseUrl = baseUrlInput.value.trim();
+            if (enabledInput.checked) {
+                try {
+                    const url = new URL(baseUrl);
+                    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('invalid protocol');
+                } catch (e) {
+                    baseUrlInput.classList.add('invalid');
+                    valid = false;
+                }
+            }
+
+            try {
+                const parsedHeaders = JSON.parse(headersInput.value.trim() || '{}');
+                if (!parsedHeaders || typeof parsedHeaders !== 'object' || Array.isArray(parsedHeaders)) {
+                    throw new Error('headers must be object');
+                }
+            } catch (e) {
+                headersInput.classList.add('invalid');
+                valid = false;
+            }
+
+            const pollInterval = parseInt(pollIntervalInput.value, 10);
+            const listLimit = parseInt(listLimitInput.value, 10);
+            const maxCacheItems = parseInt(maxCacheItemsInput.value, 10);
+            if (!pollInterval || pollInterval < 10 || pollInterval > 3600) {
+                pollIntervalInput.classList.add('invalid');
+                valid = false;
+            }
+            if (!listLimit || listLimit < 1 || listLimit > 100) {
+                listLimitInput.classList.add('invalid');
+                valid = false;
+            }
+            if (!maxCacheItems || maxCacheItems < 10 || maxCacheItems > 99) {
+                maxCacheItemsInput.classList.add('invalid');
+                valid = false;
+            }
+            const notifyVideo = notifyVideoInput.value.trim() || 'notify-rocket.webm';
+            if (!notifyVideo || /[\\/]/.test(notifyVideo)) {
+                notifyVideoInput.classList.add('invalid');
+                valid = false;
+            }
+            return valid;
+        }
+
+        baseUrlInput.addEventListener('input', () => baseUrlInput.classList.remove('invalid'));
+        headersInput.addEventListener('input', () => headersInput.classList.remove('invalid'));
+        pollIntervalInput.addEventListener('input', () => pollIntervalInput.classList.remove('invalid'));
+        listLimitInput.addEventListener('input', () => listLimitInput.classList.remove('invalid'));
+        maxCacheItemsInput.addEventListener('input', () => maxCacheItemsInput.classList.remove('invalid'));
+        notifyVideoInput.addEventListener('input', () => notifyVideoInput.classList.remove('invalid'));
+
+        document.getElementById('pickNotifyDirBtn').addEventListener('click', () => {
+            window.electronAPI.pickWebmDir();
+        });
+
+        window.electronAPI.onWebmDirPicked((dir) => {
+            messageNotifyDir = dir;
+            notifyDirHint.textContent = dir || '使用默认目录';
+        });
+
+        document.getElementById('clearNotifyDirBtn').addEventListener('click', () => {
+            messageNotifyDir = '';
+            notifyDirHint.textContent = '使用默认目录';
+        });
+
+        document.getElementById('downloadApiSpecBtn').addEventListener('click', () => {
+            window.electronAPI.downloadMessageApiSpec();
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            if (!validate()) {
+                showStatus('请检查消息提醒配置', 'error');
+                return;
+            }
+            window.electronAPI.saveConfig({
+                messageNotifyEnabled: enabledInput.checked,
+                messageApiBaseUrl: baseUrlInput.value.trim(),
+                messageAuthHeaders: headersInput.value.trim() || '{}',
+                messagePollInterval: parseInt(pollIntervalInput.value, 10),
+                messageListLimit: parseInt(listLimitInput.value, 10),
+                messageMaxCacheItems: parseInt(maxCacheItemsInput.value, 10),
+                messageNotifyDir: messageNotifyDir,
+                messageNotifyVideo: notifyVideoInput.value.trim() || 'notify-rocket.webm'
+            });
+        });
+
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            window.electronAPI.closeSettings();
+        });
+    </script>
+</body>
+</html>

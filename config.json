@@ -2,5 +2,13 @@
   "thresholdMinutes": 45,
   "breakMinutes": 5,
   "animationMode": "walk-center",
-  "messageNotifyVideo": "notify-rocket.webm"
+  "messageNotifyEnabled": false,
+  "messageApiBaseUrl": "",
+  "messageAuthHeaders": "{}",
+  "messagePollInterval": 60,
+  "messageListLimit": 50,
+  "messageMaxCacheItems": 99,
+  "messageNotifyDir": "",
+  "messageNotifyVideo": "notify-rocket.webm",
+  "messageNotifyAnimation": "rocket-corner"
 }

@@ -1,10 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, powerMonitor, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { execFileSync, execFile } = require('child_process');
 const fs = require('fs');
 const license = require('./lib/license');
 const logger = require('./lib/logger');
+const createMessageNotify = require('./lib/message-notify');
 
 app.setName('胖猫暂停一下');
 app.setPath('userData', path.join(app.getPath('appData'), 'purr-pause'));
@@ -30,14 +31,34 @@ const RESOURCES_PATH = IS_PACKAGED
 
 const USER_CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config.json');
-const DEFAULT_CONFIG = { thresholdMinutes: 45, breakMinutes: 5, customWebmDir: '', walkVideo: 'cat-walk.webm', idleVideo: 'cat-rest.webm', animationMode: 'walk-center', messageNotifyVideo: 'notify-rocket.webm' };
+const MESSAGE_API_SPEC_PATH = path.join(__dirname, 'docs', 'message-api-spec.md');
+const DEFAULT_CONFIG = {
+  thresholdMinutes: 45,
+  breakMinutes: 5,
+  customWebmDir: '',
+  walkVideo: 'cat-walk.webm',
+  idleVideo: 'cat-rest.webm',
+  animationMode: 'walk-center',
+  messageNotifyEnabled: false,
+  messageApiBaseUrl: '',
+  messageAuthHeaders: '{}',
+  messagePollInterval: 60,
+  messageListLimit: 50,
+  messageMaxCacheItems: 99,
+  messageNotifyDir: '',
+  messageNotifyVideo: 'notify-rocket.webm',
+  messageNotifyAnimation: 'rocket-corner'
+};
 let config = { ...DEFAULT_CONFIG };
 let wins = [];
 let settingsWin = null;
+let messageSettingsWin = null;
 let activationWin = null;
 let rulesWin = null;
 let rocketDemoWin = null;
 let rocketDemoTimer = null;
+let messageNotify = null;
+let messageBadgeCount = 0;
 let tray = null;
 let activeSeconds = 0;
 let monitorInterval = null;
@@ -57,6 +78,77 @@ function isSafeAssetFilename(filename) {
   if (typeof filename !== 'string') return false;
   const value = filename.trim();
   return !!value && !/[\\/]/.test(value) && value === path.basename(value);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (e) {
+    return false;
+  }
+}
+
+function normalizeMessageAuthHeaders(value) {
+  const text = String(value || '{}').trim() || '{}';
+  const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('请求头必须是 JSON 对象');
+  }
+  return JSON.stringify(parsed);
+}
+
+function applyMessageConfig(newConfig) {
+  const enabled = !!newConfig.messageNotifyEnabled;
+  const baseUrl = String(newConfig.messageApiBaseUrl || '').trim();
+  if (enabled && !isHttpUrl(baseUrl)) {
+    return { success: false, error: '启用消息提醒时，服务地址必须是 http 或 https URL' };
+  }
+
+  let authHeaders = '{}';
+  try {
+    authHeaders = normalizeMessageAuthHeaders(newConfig.messageAuthHeaders);
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+
+  const filename = String(newConfig.messageNotifyVideo || '').trim() || DEFAULT_CONFIG.messageNotifyVideo;
+  if (!isSafeAssetFilename(filename)) {
+    return { success: false, error: '小火箭素材只能填写文件名，不能包含路径分隔符' };
+  }
+
+  config.messageNotifyEnabled = enabled;
+  config.messageApiBaseUrl = baseUrl;
+  config.messageAuthHeaders = authHeaders;
+  config.messagePollInterval = clampNumber(newConfig.messagePollInterval, 10, 3600, DEFAULT_CONFIG.messagePollInterval);
+  config.messageListLimit = clampNumber(newConfig.messageListLimit, 1, 100, DEFAULT_CONFIG.messageListLimit);
+  config.messageMaxCacheItems = clampNumber(newConfig.messageMaxCacheItems, 10, 99, DEFAULT_CONFIG.messageMaxCacheItems);
+  if (newConfig.messageNotifyDir !== undefined) {
+    const dir = String(newConfig.messageNotifyDir || '').trim();
+    if (dir) {
+      try {
+        const stat = fs.statSync(dir);
+        if (!stat.isDirectory()) {
+          return { success: false, error: '小火箭素材目录必须是有效目录' };
+        }
+      } catch (e) {
+        return { success: false, error: '小火箭素材目录不存在或无法访问' };
+      }
+      config.messageNotifyDir = dir;
+      generateMessageNotifyReadmeInDir(dir);
+    } else {
+      config.messageNotifyDir = '';
+    }
+  }
+  config.messageNotifyVideo = filename;
+  config.messageNotifyAnimation = 'rocket-corner';
+  return { success: true };
 }
 
 function quoteDesktopExecPart(value) {
@@ -445,7 +537,7 @@ function getVideoPaths() {
   };
 }
 
-function findMediaFile(filename) {
+function findMediaFile(filename, preferredDirs = []) {
   if (!isSafeAssetFilename(filename)) return null;
 
   const customDir = config.customWebmDir || '';
@@ -453,7 +545,7 @@ function findMediaFile(filename) {
   if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
   const builtinDir = path.join(RESOURCES_PATH, 'webm');
 
-  const searchDirs = [customDir, userDir, builtinDir].filter(Boolean);
+  const searchDirs = [...preferredDirs, customDir, userDir, builtinDir].filter(Boolean);
   for (const dir of searchDirs) {
     const candidate = path.join(dir, filename);
     if (fs.existsSync(candidate)) return candidate;
@@ -463,7 +555,7 @@ function findMediaFile(filename) {
 }
 
 function getRocketMediaUrl(filename) {
-  const mediaPath = findMediaFile(filename || DEFAULT_CONFIG.messageNotifyVideo);
+  const mediaPath = findMediaFile(filename || DEFAULT_CONFIG.messageNotifyVideo, [config.messageNotifyDir || '']);
   return mediaPath ? pathToFileURL(mediaPath).toString() : '';
 }
 
@@ -471,6 +563,7 @@ function triggerCat(manual) {
   if (isOverlayShowing) return;
   if (!manual && Date.now() - lastDismissTime < 60000) return;
   isOverlayShowing = true;
+  if (messageNotify) messageNotify.handleRestOverlayChanged(true);
 
   const displays = screen.getAllDisplays();
 
@@ -623,6 +716,7 @@ function triggerRocketDemo(options = {}) {
 
 function dismissCat() {
   isOverlayShowing = false;
+  if (messageNotify) messageNotify.handleRestOverlayChanged(false);
   activeSeconds = 0;
   snoozeCount = 0;
   snoozeThreshold = 0;
@@ -697,6 +791,8 @@ function rebuildTrayMenu() {
   const contextMenu = Menu.buildFromTemplate([
     { label: statusLabel, enabled: false },
     ...(remainingLabel ? [{ label: remainingLabel, enabled: false }] : []),
+    { label: `待办消息（${messageBadgeCount}）`, click: () => { if (messageNotify) messageNotify.openMessageList(); } },
+    { label: '消息提醒设置', click: () => openMessageSettings() },
     { type: 'separator' },
     ...(isPaused ? [
       { label: '恢复监控', click: () => resumeMonitoring() }
@@ -711,7 +807,7 @@ function rebuildTrayMenu() {
     { label: '激活/续期', click: () => showActivationWindow(licenseStatus) },
     { label: '设置', click: () => openSettings() },
     { label: '计时规则', click: () => openRules() },
-    { label: '查看日志', click: () => { require('electron').shell.openPath(logger.getLogPath()); } },
+    { label: '查看日志', click: () => { shell.openPath(logger.getLogPath()); } },
     { label: '小火箭演示', click: () => triggerRocketDemo() },
     { label: '立即测试', click: () => triggerCat(true) },
     { label: '重置计时', click: () => { activeSeconds = 0; lastRemainingMins = -1; rebuildTrayMenu(); logger.info('手动重置计时'); } },
@@ -774,6 +870,44 @@ function generateReadmeInDir(dir) {
   }
 }
 
+function generateMessageNotifyReadmeInDir(dir) {
+  try {
+    if (!fs.existsSync(dir)) return;
+    const readmePath = path.join(dir, 'purr-pause-消息提醒素材说明.txt');
+    if (fs.existsSync(readmePath)) return;
+    fs.writeFileSync(readmePath, [
+      '=== 胖猫暂停一下（PurrPause） 消息提醒素材说明 ===',
+      '',
+      '将你的小火箭提醒 .webm 视频文件放在此目录下即可替换消息提醒动画素材。',
+      '',
+      '默认文件名：',
+      '  - notify-rocket.webm → 小火箭消息提醒动画',
+      '',
+      '文件要求：',
+      '  - 格式：WebM（VP9 编码，带 Alpha 通道实现透明背景）',
+      '  - 背景：必须透明，否则会遮挡桌面',
+      '  - 建议尺寸：240x240 左右',
+      '  - 建议时长：2~4 秒，火箭主体保持在画面中间',
+      '',
+      '查找顺序：',
+      '  1. 消息提醒设置中的“小火箭素材目录”',
+      '  2. 通用素材目录',
+      '  3. 用户默认素材目录 ~/.config/purr-pause/webm/',
+      '  4. 应用内置素材目录',
+      '',
+      '如需使用其他文件名，请在“消息提醒设置”中修改“小火箭素材”。',
+      '文件名只能填写文件名，例如 notify-rocket.webm，不能包含目录分隔符。',
+      '',
+      '制作建议：',
+      '  - 使用 FFmpeg 导出带 Alpha 通道的 WebM：',
+      '    ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 2M notify-rocket.webm',
+      ''
+    ].join('\n'));
+  } catch (e) {
+    console.error('[purr-pause] Failed to generate message notify readme:', e.message);
+  }
+}
+
 function openRules() {
   if (rulesWin) {
     rulesWin.focus();
@@ -782,7 +916,7 @@ function openRules() {
 
   const display = screen.getPrimaryDisplay();
   const { width: sw, height: sh } = display.workArea;
-  const winW = 600;
+  const winW = Math.min(900, Math.max(720, sw - 48));
   const maxH = Math.round(sh * 0.8);
 
   rulesWin = new BrowserWindow({
@@ -871,6 +1005,55 @@ function openSettings() {
   settingsWin.on('closed', () => { settingsWin = null; });
 }
 
+function openMessageSettings() {
+  if (messageSettingsWin) {
+    messageSettingsWin.focus();
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const { width: sw, height: sh } = display.workArea;
+  const winW = 400;
+  const maxH = Math.round(sh * 0.8);
+
+  messageSettingsWin = new BrowserWindow({
+    x: Math.round(display.workArea.x + (sw - winW) / 2),
+    y: Math.round(display.workArea.y + (sh - maxH) / 2),
+    width: winW,
+    height: maxH,
+    show: false,
+    resizable: true,
+    minimizable: false,
+    maximizable: false,
+    frame: true,
+    autoHideMenuBar: true,
+    title: '消息提醒设置',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  messageSettingsWin.setMenuBarVisibility(false);
+  messageSettingsWin.loadFile(path.join(__dirname, 'renderer', 'message-settings.html'));
+  messageSettingsWin.webContents.on('did-finish-load', () => {
+    messageSettingsWin.webContents.send('load-config', { ...config });
+    messageSettingsWin.webContents.executeJavaScript('document.body.scrollHeight').then((contentH) => {
+      const frameExtra = messageSettingsWin.getSize()[1] - messageSettingsWin.getContentSize()[1];
+      const winH = Math.min(contentH + frameExtra, maxH);
+      messageSettingsWin.setSize(winW, winH);
+      messageSettingsWin.setPosition(
+        Math.round(display.workArea.x + (sw - winW) / 2),
+        Math.round(display.workArea.y + (sh - winH) / 2)
+      );
+      messageSettingsWin.show();
+    });
+  });
+
+  messageSettingsWin.on('closed', () => { messageSettingsWin = null; });
+}
+
 function createTray() {
   const iconPath = path.join(RESOURCES_PATH, 'images', 'tray-icon.png');
   let icon;
@@ -897,15 +1080,37 @@ app.whenReady().then(() => {
   const userWebmDir = path.join(app.getPath('userData'), 'webm');
   if (!fs.existsSync(userWebmDir)) fs.mkdirSync(userWebmDir, { recursive: true });
   generateReadmeInDir(userWebmDir);
+  if (config.messageNotifyDir) {
+    generateMessageNotifyReadmeInDir(config.messageNotifyDir);
+  }
 
   createTray();
+  const licenseStatus = license.checkStatus(app.getPath('userData'));
+  logger.info('许可证状态: ' + licenseStatus.status + ', 类型: ' + (licenseStatus.type || ''));
+  const initialMessageConfig = licenseStatus.status === 'expired'
+    ? { ...config, messageNotifyEnabled: false }
+    : config;
+  messageNotify = createMessageNotify(initialMessageConfig, {
+    BrowserWindow,
+    screen,
+    shell,
+    preloadPath: path.join(__dirname, 'preload.js'),
+    rendererDir: path.join(__dirname, 'renderer'),
+    logger,
+    getNotifyMediaUrl: getRocketMediaUrl,
+    isRestOverlayShowing: () => isOverlayShowing,
+    onBadgeChange: (count) => {
+      messageBadgeCount = count;
+      rebuildTrayMenu();
+    }
+  });
+  messageBadgeCount = messageNotify.getBadgeCount();
+  rebuildTrayMenu();
 
   if (process.argv.includes('--rocket-demo')) {
     setTimeout(() => triggerRocketDemo(), 800);
   }
 
-  const licenseStatus = license.checkStatus(app.getPath('userData'));
-  logger.info('许可证状态: ' + licenseStatus.status + ', 类型: ' + (licenseStatus.type || ''));
   if (licenseStatus.status === 'expired') {
     showActivationWindow(licenseStatus);
   } else {
@@ -935,6 +1140,7 @@ ipcMain.on('snooze', () => {
   if (snoozeCount >= 2) return;
   snoozeCount++;
   isOverlayShowing = false;
+  if (messageNotify) messageNotify.handleRestOverlayChanged(false);
   wins.forEach(w => { if (w && !w.isDestroyed()) w.destroy(); });
   wins = [];
   activeSeconds = 0;
@@ -944,10 +1150,31 @@ ipcMain.on('snooze', () => {
 });
 
 ipcMain.on('save-config', (event, newConfig) => {
-  config.thresholdMinutes = Math.max(1, Math.min(480, parseInt(newConfig.thresholdMinutes) || 45));
-  config.breakMinutes = Math.max(1, Math.min(60, parseInt(newConfig.breakMinutes) || 5));
+  newConfig = newConfig || {};
+  const hasMessageConfig = Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyEnabled')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageApiBaseUrl')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageAuthHeaders')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messagePollInterval')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageListLimit')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageMaxCacheItems')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyDir')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyVideo');
+  if (hasMessageConfig) {
+    const messageResult = applyMessageConfig(newConfig);
+    if (!messageResult.success) {
+      event.sender.send('save-config-result', messageResult);
+      return;
+    }
+  }
+
+  if (newConfig.thresholdMinutes !== undefined) {
+    config.thresholdMinutes = Math.max(1, Math.min(480, parseInt(newConfig.thresholdMinutes) || 45));
+  }
+  if (newConfig.breakMinutes !== undefined) {
+    config.breakMinutes = Math.max(1, Math.min(60, parseInt(newConfig.breakMinutes) || 5));
+  }
   const validModes = ['walk-zoom', 'fade-center', 'walk-flat', 'walk-center'];
-  if (validModes.includes(newConfig.animationMode)) {
+  if (newConfig.animationMode !== undefined && validModes.includes(newConfig.animationMode)) {
     const licStatus = license.checkStatus(app.getPath('userData'));
     if (licStatus.status === 'active') {
       config.animationMode = newConfig.animationMode;
@@ -955,10 +1182,6 @@ ipcMain.on('save-config', (event, newConfig) => {
   }
   if (newConfig.autoLaunch !== undefined) {
     setAutoLaunchEnabled(!!newConfig.autoLaunch);
-  }
-  if (newConfig.messageNotifyVideo !== undefined) {
-    const filename = String(newConfig.messageNotifyVideo || '').trim() || DEFAULT_CONFIG.messageNotifyVideo;
-    config.messageNotifyVideo = isSafeAssetFilename(filename) ? filename : DEFAULT_CONFIG.messageNotifyVideo;
   }
   if (newConfig.customWebmDir !== undefined) {
     const licenseStatus = license.checkStatus(app.getPath('userData'));
@@ -977,23 +1200,64 @@ ipcMain.on('save-config', (event, newConfig) => {
     }
   }
   saveConfig();
+  if (messageNotify) messageNotify.updateConfig(config);
+  messageBadgeCount = messageNotify ? messageNotify.getBadgeCount() : 0;
   updateTray();
   rebuildTrayMenu();
   logger.info('配置已保存: thresholdMinutes=' + config.thresholdMinutes + ', breakMinutes=' + config.breakMinutes + ', animationMode=' + config.animationMode);
+  event.sender.send('save-config-result', { success: true });
 });
 
-ipcMain.on('close-settings', () => {
-  if (settingsWin) settingsWin.close();
+ipcMain.on('close-settings', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) win.close();
 });
 
-ipcMain.on('pick-webm-dir', async () => {
-  if (!settingsWin) return;
-  const result = await dialog.showOpenDialog(settingsWin, {
+ipcMain.on('download-message-api-spec', async (event) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender);
+  if (!ownerWin || ownerWin.isDestroyed()) return;
+  try {
+    const result = await dialog.showSaveDialog(ownerWin, {
+      title: '下载消息提醒接口规范',
+      defaultPath: 'PurrPause-消息提醒接口规范-v1.md',
+      filters: [
+        { name: 'Markdown', extensions: ['md'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || !result.filePath) {
+      ownerWin.webContents.send('download-message-api-spec-result', { success: false, canceled: true });
+      return;
+    }
+    const content = fs.readFileSync(MESSAGE_API_SPEC_PATH, 'utf-8');
+    fs.writeFileSync(result.filePath, content);
+    ownerWin.webContents.send('download-message-api-spec-result', { success: true, filePath: result.filePath });
+  } catch (e) {
+    ownerWin.webContents.send('download-message-api-spec-result', { success: false, error: '下载失败: ' + e.message });
+  }
+});
+
+ipcMain.on('refresh-messages', () => {
+  if (messageNotify) messageNotify.refreshList({ manual: true, suppressNotification: true }).catch(() => {});
+});
+
+ipcMain.on('open-message-target', (event, id) => {
+  if (messageNotify) messageNotify.openMessageTarget(String(id || ''));
+});
+
+ipcMain.on('dismiss-message-notification', () => {
+  if (messageNotify) messageNotify.dismissNotification();
+});
+
+ipcMain.on('pick-webm-dir', async (event) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender);
+  if (!ownerWin || ownerWin.isDestroyed()) return;
+  const result = await dialog.showOpenDialog(ownerWin, {
     title: '选择素材目录',
     properties: ['openDirectory']
   });
   if (!result.canceled && result.filePaths.length > 0) {
-    settingsWin.webContents.send('webm-dir-picked', result.filePaths[0]);
+    ownerWin.webContents.send('webm-dir-picked', result.filePaths[0]);
   }
 });
 
@@ -1064,6 +1328,7 @@ ipcMain.on('activate', (event, serial) => {
     if (result.success) {
       rebuildTrayMenu();
       if (!monitorInterval) startMonitoring();
+      if (messageNotify) messageNotify.updateConfig(config);
     }
   } catch (e) {
     console.error('[purr-pause] Activation error:', e);
@@ -1085,5 +1350,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (messageNotify) messageNotify.destroy();
   closeRocketDemo();
 });
