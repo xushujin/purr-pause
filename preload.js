@@ -44,5 +44,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   refreshMessages: () => ipcRenderer.send('refresh-messages'),
   openMessageTarget: (id) => ipcRenderer.send('open-message-target', id),
-  dismissMessageNotification: () => ipcRenderer.send('dismiss-message-notification')
+  dismissMessageNotification: () => ipcRenderer.send('dismiss-message-notification'),
+  testMessageConnection: (config) => ipcRenderer.send('test-message-connection', config),
+  onTestMessageConnectionResult: (callback) => {
+    ipcRenderer.removeAllListeners('test-message-connection-result');
+    ipcRenderer.on('test-message-connection-result', (event, result) => callback(result));
+  }
 });

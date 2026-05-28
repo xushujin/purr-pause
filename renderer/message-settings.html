@@ -182,6 +182,14 @@
             <div class="hint">JSON 对象，例如 {"Authorization":"Bearer xxx"}</div>
             <textarea id="messageAuthHeaders" spellcheck="false" placeholder='{"Authorization":"Bearer xxx"}'></textarea>
         </div>
+        <div class="field column">
+            <label>测试连接</label>
+            <div class="hint">使用当前填写的服务地址和请求头试调 count + list 接口（不需要先保存）</div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+                <button class="btn-pick" id="testConnectionBtn">测试连接</button>
+                <span id="testConnectionResult" style="font-size:0.82rem;color:#8b5e34;flex:1;min-width:0;word-break:break-all;"></span>
+            </div>
+        </div>
         <div class="field">
             <div>
                 <label>轮询间隔</label>
@@ -356,6 +364,95 @@
 
         document.getElementById('downloadApiSpecBtn').addEventListener('click', () => {
             window.electronAPI.downloadMessageApiSpec();
+        });
+
+        const testConnectionBtn = document.getElementById('testConnectionBtn');
+        const testConnectionResult = document.getElementById('testConnectionResult');
+        let testInFlight = false;
+        let testTimeoutTimer = null;
+
+        function setTestResult(text, color) {
+            testConnectionResult.textContent = text;
+            testConnectionResult.style.color = color;
+        }
+
+        function finishTest() {
+            testInFlight = false;
+            testConnectionBtn.disabled = false;
+            testConnectionBtn.textContent = '测试连接';
+            if (testTimeoutTimer) {
+                clearTimeout(testTimeoutTimer);
+                testTimeoutTimer = null;
+            }
+        }
+
+        testConnectionBtn.addEventListener('click', () => {
+            if (testInFlight) return;
+            baseUrlInput.classList.remove('invalid');
+            headersInput.classList.remove('invalid');
+
+            const baseUrl = baseUrlInput.value.trim();
+            if (!baseUrl) {
+                baseUrlInput.classList.add('invalid');
+                setTestResult('请先填写服务地址', '#dc2626');
+                return;
+            }
+            try {
+                const u = new URL(baseUrl);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('protocol');
+            } catch (e) {
+                baseUrlInput.classList.add('invalid');
+                setTestResult('服务地址不是合法 http/https URL', '#dc2626');
+                return;
+            }
+            try {
+                const parsed = JSON.parse((headersInput.value.trim() || '{}'));
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('shape');
+            } catch (e) {
+                headersInput.classList.add('invalid');
+                setTestResult('请求头必须是 JSON 对象', '#dc2626');
+                return;
+            }
+
+            testInFlight = true;
+            testConnectionBtn.disabled = true;
+            testConnectionBtn.textContent = '测试中...';
+            setTestResult('正在请求 count + list 接口...', '#8b5e34');
+
+            window.electronAPI.testMessageConnection({
+                messageApiBaseUrl: baseUrl,
+                messageAuthHeaders: headersInput.value.trim() || '{}',
+                messageMaxCacheItems: parseInt(maxCacheItemsInput.value, 10) || 99
+            });
+
+            testTimeoutTimer = setTimeout(() => {
+                if (!testInFlight) return;
+                finishTest();
+                setTestResult('✗ 测试超时（主进程无响应）', '#dc2626');
+            }, 15000);
+        });
+
+        window.electronAPI.onTestMessageConnectionResult((result) => {
+            if (!testInFlight) return;
+            finishTest();
+            if (!result) {
+                setTestResult('✗ 测试失败：未收到结果', '#dc2626');
+                return;
+            }
+            if (result.ok) {
+                const data = (result.count && result.count.data) || {};
+                const total = data.total !== undefined ? data.total : '?';
+                const unreadPart = data.unread !== undefined ? '（其中未读 ' + data.unread + ' 条）' : '';
+                const items = (result.list && result.list.data && Array.isArray(result.list.data.items)) ? result.list.data.items.length : 0;
+                setTestResult('✓ 接通：待办 ' + total + ' 条' + unreadPart + '，列表返回 ' + items + ' 条', '#16a34a');
+                return;
+            }
+            if (result.count && result.count.ok && result.list && !result.list.ok) {
+                setTestResult('⚠ count 接通，但 list 失败：' + result.list.error, '#dc2626');
+                return;
+            }
+            const reason = (result.count && result.count.error) || result.error || '未知错误';
+            setTestResult('✗ count 失败：' + reason, '#dc2626');
         });
 
         document.getElementById('saveBtn').addEventListener('click', () => {

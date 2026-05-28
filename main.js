@@ -1249,6 +1249,22 @@ ipcMain.on('dismiss-message-notification', () => {
   if (messageNotify) messageNotify.dismissNotification();
 });
 
+ipcMain.on('test-message-connection', async (event, formConfig) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender);
+  if (!ownerWin || ownerWin.isDestroyed()) return;
+  try {
+    const result = await createMessageNotify.testConnection(formConfig || {}, logger);
+    if (ownerWin.isDestroyed()) return;
+    ownerWin.webContents.send('test-message-connection-result', result);
+  } catch (e) {
+    if (ownerWin.isDestroyed()) return;
+    ownerWin.webContents.send('test-message-connection-result', {
+      ok: false,
+      error: e && e.message ? e.message : String(e)
+    });
+  }
+});
+
 ipcMain.on('pick-webm-dir', async (event) => {
   const ownerWin = BrowserWindow.fromWebContents(event.sender);
   if (!ownerWin || ownerWin.isDestroyed()) return;
