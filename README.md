@@ -23,7 +23,7 @@
 ### Ubuntu / Debian
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.2.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.2.1_amd64.deb
 ```
 
 ### 从源码运行
@@ -105,8 +105,22 @@ node tools/keygen.js --verify <序列号>               # 验证
 
 ## 打包
 
+### 打包 Linux deb（推荐）
+
+一键脚本：自动定位项目根目录、检查 node/npm、缺依赖时自动 `npm install`，结束后打印产物路径与大小。
+
 ```bash
-npm run build:linux   # Ubuntu deb
+./scripts/build-deb.sh          # 等价于 npm run build:linux
+bash scripts/build-deb.sh       # 没有执行权限时这样跑
+```
+
+- 产物位于 `dist/purr-pause_<版本>_amd64.deb`（版本号取自 `package.json`）。
+- 额外参数会透传给 electron-builder，例如：`./scripts/build-deb.sh --publish never`。
+
+### 其他平台
+
+```bash
+npm run build:linux   # Ubuntu deb（上面脚本的底层命令）
 npm run build:mac     # macOS dmg (需在 Mac 上)
 npm run build:win     # Windows exe (需在 Windows 上)
 ```

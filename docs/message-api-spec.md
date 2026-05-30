@@ -1,6 +1,6 @@
 # PurrPause 消息提醒接口规范 v1
 
-本文档用于第三方系统接入 PurrPause 消息提醒功能。第三方只需要按约定提供两个 HTTP JSON 接口：待办消息总数、待办消息列表。
+本文档用于第三方系统接入 PurrPause 消息提醒功能。第三方只需要按约定提供**一个** HTTP JSON 接口：待办消息列表。用户在 PurrPause 里填入该接口的**完整 URL**，PurrPause 会按固定参数轮询它，展示待办、显示角标并用小火箭动画提醒。
 
 ## 通用要求
 
@@ -9,65 +9,41 @@
 - 字符编码：UTF-8。
 - 时间格式：ISO 8601，例如 `2026-05-26T10:30:00+08:00`。
 - 鉴权：由客户在 PurrPause 消息提醒设置中配置请求头，推荐 `Authorization: Bearer <token>`。
-- 所有接口应在 5 秒内返回；超时会被视为请求失败。
+- 接口应在 5 秒内返回；超时会被视为请求失败。
 - 第三方必须保证同一条待办消息的 `id` 稳定不变。
+- 接口应尽量轻量：PurrPause 会按用户配置的间隔反复轮询它。
 
-## 接口 1：获取待办消息总数
+## 接口：获取待办消息列表
 
-用于高频轮询。该接口应轻量，不返回完整列表。
+PurrPause 只调用这一个接口，既用于展示待办列表，也用于轮询检测新待办。
+
+### 接口地址
+
+接口地址由用户在 PurrPause 设置里填写**完整的列表接口 URL**。第三方可以把该接口部署在任意路径，**不要求挂在主机根路径**。
+
+- 推荐按约定使用 `https://<你的域名>/purr-pause/v1/todos`（带版本号 `v1`，便于后续演进），但路径由第三方决定，例如 `https://oa.example.com/integrations/purr-pause/todos` 同样可用。
+- PurrPause 会在该 URL 上**追加** `limit` 与 `offset` 两个查询参数（若 URL 里已带同名参数会被覆盖，其余查询参数保留），URL 的协议/主机/路径原样请求。
+
+示例（采用推荐路径时）：
 
 ```http
-GET /purr-pause/v1/todos/count
+GET https://oa.example.com/purr-pause/v1/todos?limit=30&offset=0
 Authorization: Bearer <token>
 Accept: application/json
 ```
 
-成功响应：
+### 请求约定
 
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "total": 12,
-    "unread": 5,
-    "latestChangedAt": "2026-05-26T10:30:00+08:00",
-    "version": "20260526103000"
-  }
-}
-```
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `limit` | number | PurrPause 固定以 `limit ≤ 30` 轮询（由用户在设置中的「每源待办条数」决定，范围 1–30，默认 30）。 |
+| `offset` | number | PurrPause 固定传 `0`，只关心最近的待办。 |
 
-字段说明：
+- PurrPause **只拉取最近的 `limit` 条**（最多 30），不做翻页。
+- 第三方**必须按 `createdAt` 倒序返回**，把最近创建的待办排在最前，确保截断后保留的就是最新的。
+- 轮询间隔由用户配置（10–3600 秒，默认 60 秒），所有源共用。请保证该接口足够轻量以支撑反复轮询。
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `code` | number | 是 | `0` 表示成功，非 0 表示业务失败 |
-| `message` | string | 是 | 状态说明 |
-| `data.total` | number | 是 | 当前待办总数 |
-| `data.unread` | number | 否 | 未读数量；没有未读概念时可等于 `total` |
-| `data.latestChangedAt` | string | 推荐 | 待办集合最近变更时间 |
-| `data.version` | string | 推荐 | 待办集合版本号；任一待办新增、删除、状态变化时应改变 |
-
-`latestChangedAt` 或 `version` 至少建议提供一个。只提供 `total` 会有盲区：如果一条旧消息消失、一条新消息出现，总数不变，PurrPause 可能无法感知变化。
-
-## 接口 2：获取待办消息列表
-
-用于返回待办消息列表。
-
-```http
-GET /purr-pause/v1/todos?limit=50&offset=0
-Authorization: Bearer <token>
-Accept: application/json
-```
-
-请求参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `limit` | number | 否 | 默认 50，最大 99 |
-| `offset` | number | 否 | 默认 0 |
-
-成功响应：
+### 成功响应
 
 ```json
 {
@@ -80,15 +56,8 @@ Accept: application/json
         "id": "todo-10086",
         "title": "审批单待处理",
         "summary": "张三提交了采购审批，需要你处理",
-        "source": {
-          "id": "oa",
-          "name": "OA",
-          "color": "#2f80ed"
-        },
         "level": "normal",
-        "status": "pending",
         "createdAt": "2026-05-26T09:30:00+08:00",
-        "updatedAt": "2026-05-26T10:30:00+08:00",
         "targetUrl": "https://example.com/todos/todo-10086"
       }
     ]
@@ -96,31 +65,52 @@ Accept: application/json
 }
 ```
 
-消息项字段：
+### 顶层字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `code` | number | 是 | `0` 表示成功，非 0 表示业务失败 |
+| `message` | string | 是 | 状态说明 |
+| `data.total` | number | 否 | 服务端当前待办总数。仅用于在列表里提示「仅显示最近 N 条」；缺失时 PurrPause 按返回条数处理。**不用于角标。** |
+| `data.items` | array | 是 | 待办列表，按 `createdAt` 倒序，最多 `limit` 条 |
+
+### 消息项字段
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `id` | string | 是 | 全局稳定唯一 ID |
 | `title` | string | 是 | 列表主标题 |
 | `summary` | string | 否 | 简短描述，建议 120 字以内 |
-| `source.id` | string | 推荐 | 第三方来源标识，例如 `oa`、`jira`、`crm` |
-| `source.name` | string | 推荐 | 第三方来源名称，用于列表标签 |
-| `source.color` | string | 否 | 来源颜色，建议 6 位十六进制色值，例如 `#2f80ed` |
 | `level` | string | 否 | `low` / `normal` / `high` / `urgent` |
-| `status` | string | 否 | `pending` / `processing` / `done` / `cancelled` |
-| `createdAt` | string | 否 | 创建时间 |
-| `updatedAt` | string | 推荐 | 最近更新时间 |
+| `createdAt` | string | 否 | 创建时间，用于排序；缺失时按接口返回顺序 |
 | `targetUrl` | string | 是 | 点击后打开的第三方页面 URL，必须是 `http:` 或 `https:` |
 
-建议第三方只返回 `status` 为 `pending` 或 `processing` 的消息；如返回 `done` 或 `cancelled`，PurrPause 可能不会展示。
+- 请**只返回未完成的待办**：PurrPause 会如实展示收到的每一条，不再按状态过滤，已完成 / 已取消的待办请不要返回。
+- `id` 必须稳定：PurrPause 用 `id` 判断「这是不是一条新待办」，从而决定是否播放提醒动画。`id` 漂移会导致重复提醒。
 
-来源字段处理规则：
+来源标签说明：
 
-- `source.id` 缺失时归为 `unknown`。
-- `source.name` 缺失时显示“未知来源”。
-- `source.color` 缺失或非法时，PurrPause 按 `source.id` 从内置调色板稳定分配颜色。
-- 不支持任意 CSS，只接受 `#RRGGBB` 格式色值。
-- 如果客户有多个第三方系统，推荐由客户侧网关聚合为同一套接口，并通过 `source` 字段区分来源。
+- 列表里每条待办的**来源标签和颜色来自用户在 PurrPause 中为该接口配置的源名称**，响应本身无需携带来源信息。
+- 如果客户有多个第三方系统，推荐在 PurrPause 里**分别配置多个源**（每个源对应一个接口）来区分来源；若由网关聚合为单一接口，则这些待办会统一显示为该源的标签。
+
+## 点击与本地清理
+
+PurrPause 对待办的处理是**只读 + 本地清理**，不需要第三方提供任何写接口：
+
+- 用户在待办列表点击一条消息时，PurrPause 用系统默认浏览器打开它的 `targetUrl`。
+- 打开成功后，PurrPause **仅在本地移除该条**（从列表移除、角标 -1），让“处理完一条少一条”的体感成立。
+- PurrPause **不会回写第三方**，不调用“标记已读 / 完成”之类的接口，也不要求第三方提供这类接口。
+- 后续轮询里第三方**可以继续返回这条待办**：PurrPause 会记住本地已清理的 `id`，不会让它重新出现在列表、也不会再次播放动画。
+- 如果第三方按自身业务把这条待办真正完成/删除（列表里不再返回它），PurrPause 会自然遗忘对它的本地清理记录。
+- 本地清理记录只存在于内存，不落盘。**重启 PurrPause 后**，已点击但服务端仍在返回的待办会重新出现在列表里；但由于重启后的首次轮询只建立基线、不播放动画，不会因此打扰用户。
+
+> 即第三方只需如实返回当前的待办列表即可；“已处理”由第三方自己的业务系统决定何时不再返回该条，PurrPause 不参与回写。
+
+## 角标说明
+
+- 托盘和列表里的「待办角标数字」= PurrPause **本地当前保留的待办条数**（每源最多 30，已扣除本地点击清理的条目），是各启用源之和。
+- 角标**不取自** `data.total`；`data.total` 仅用于判断是否提示“仅显示最近 N 条”。
+- 因此角标反映的是“用户当前在 PurrPause 里还没处理的最近待办数”，可能小于服务端真实总数（服务端有超过 30 条，或用户已本地点掉若干条）。
 
 ## 错误响应
 
@@ -146,3 +136,4 @@ Accept: application/json
 错误判定：
 
 - 非 2xx 或 `code !== 0` 会被视为失败。
+- 连续失败时 PurrPause 会自动降低轮询频率（退避），恢复后回到正常间隔；失败只记录日志和设置页状态，不打扰用户。

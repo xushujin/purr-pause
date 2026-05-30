@@ -5,9 +5,9 @@
   "messageNotifyEnabled": false,
   "messageApiBaseUrl": "",
   "messageAuthHeaders": "{}",
+  "messageSources": [],
   "messagePollInterval": 60,
-  "messageListLimit": 50,
-  "messageMaxCacheItems": 99,
+  "messageMaxCacheItems": 30,
   "messageNotifyDir": "",
   "messageNotifyVideo": "notify-rocket.webm",
   "messageNotifyAnimation": "rocket-corner"

@@ -1,18 +1,25 @@
 # 消息提醒/待办通知模块设计
 
-> 状态：MVP 已实现。本文档继续作为第三方接口接入规范和后续迭代约束。
+> 状态：MVP 已实现，并于 2026-05 重构为「单 list 接口」方案。本文档作为内部设计与迭代约束；第三方对接以 `docs/message-api-spec.md` 为准。
+>
+> 2026-05 更新：去掉 count 接口，直接轮询 list；每源待办固定上限 30（可配置，默认 30）；点击待办打开 `targetUrl` 后本地清理该条；角标取本地保留条数（≤30），不再取自服务端 total/unread。
+>
+> 2026-05 更新（响应精简）：待办项响应去掉 `source`、`status`、`updatedAt` 三个字段；客户端不再按状态过滤（第三方只返回未完成待办即可），排序改为按 `createdAt` 倒序；来源标签改为取自用户在 PurrPause 配置的源（响应不再携带来源信息）。
+>
+> 2026-05 更新（接口地址）：源配置由「服务地址(Base URL) + 写死路径 `/purr-pause/v1/todos`」改为「用户填**完整列表接口 URL**（`listUrl`）」，应用只在其后追加 `limit`/`offset`；`/purr-pause/v1/todos` 降级为**推荐约定路径**，第三方可挂任意路径、不再被强制挂主机根路径。旧 `messageApiBaseUrl` / 源 `baseUrl` 自动迁移为 `listUrl`（与约定路径拼接，保持老行为）。
 
 ## 当前结论
 
 - 消息提醒是可选模块，默认关闭，客户可在设置中开启或关闭。
 - 第三方系统按 PurrPause 定义的接口规范开发，不再让用户写 JS 表达式适配任意响应。
-- 第一版只要求第三方提供两个 HTTP JSON 接口：待办消息总数、待办消息列表。
-- 应用通过轮询总数接口判断是否有变化，再按需拉取列表，降低接口压力。
+- 第三方只需提供一个 HTTP JSON 接口：待办消息列表（已去掉早期的“待办总数 count”接口）。
+- 应用直接按固定间隔轮询列表接口（limit ≤ 30、offset = 0），用返回项的 id 与本地已知集合比对来发现新待办，降低接口数量和接入成本。
 - 新消息提醒包含两部分：消息数量角标、轻量动画提醒。
 - 提醒动画应尽量不遮挡屏幕、不抢焦点、不影响鼠标键盘操作；推荐使用右下角或屏幕边缘的透明点击穿透窗口。
-- 应用内提供“待办消息列表”窗口；点击消息项打开第三方提供的 `targetUrl`。
-- 待办列表需要按第三方来源做明显区分：每条消息携带来源标识、来源名称和可选颜色，客户端渲染为来源标签。
-- 客户端只保留有限数量的消息快照；超过上限时丢弃旧消息，避免列表和内存无限增长。
+- 应用内提供“待办消息列表”窗口；点击消息项打开第三方提供的 `targetUrl`，并在本地清理该条（角标 -1、列表移除），不回写第三方。
+- 待办列表需要按来源做明显区分：来源标签和颜色取自用户在 PurrPause 中为每个接口配置的源（名称 + 内置色板），客户端据此渲染来源标签。
+- 客户端每源只保留最近 30 条（可配置，默认 30）消息快照；超过上限时丢弃旧消息，避免列表和内存无限增长。
+- 角标取本地保留的待办条数（每源 ≤ 30 之和），不取自服务端 total/unread。
 
 ## 当前实现状态
 
@@ -38,20 +45,18 @@ PurrPause 当前主要提供休息提醒。新模块用于连接客户已有的�
 ### 做
 
 - 独立“消息提醒设置”窗口提供“消息提醒”总开关。
-- 独立“消息提醒设置”窗口配置第三方服务基础地址、认证信息和轮询间隔。
-- 轮询“待办消息总数”接口。
-- 总数或变更标识变化后拉取“待办消息列表”接口。
-- 检测到新增待办时显示数量角标，并播放一次提醒动画。
+- 独立“消息提醒设置”窗口配置一个或多个第三方接口源（完整列表接口 URL、认证请求头、启用开关）和全局轮询间隔、每源待办条数。
+- 按固定间隔轮询“待办消息列表”接口（limit ≤ 30、offset = 0）。
+- 用返回项 id 与本地已知集合比对，检测到新增待办时显示数量角标，并播放一次提醒动画。
 - 提供待办消息列表窗口。
-- 点击消息项用系统默认浏览器打开第三方 `targetUrl`。
+- 点击消息项用系统默认浏览器打开第三方 `targetUrl`，并在本地清理该条（角标 -1、列表移除）。
 - 关闭开关后停止轮询、隐藏角标、关闭提醒动画窗口，但保留配置。
 
 ### 暂不做
 
 - 不做服务端推送、WebSocket、SSE。
-- 不做消息已读回写接口。
-- 不在本地持久化完整消息内容。
-- 不做客户端同时配置多个 API 源；第一版建议由一个第三方聚合接口返回不同来源的待办消息。
+- 不做消息已读回写接口（点击只在本地清理，不回写第三方）。
+- 不在本地持久化完整消息内容（含本地清理记录，均仅存内存）。
 - 不做复杂消息详情页；详情由第三方网站承载。
 - 不做系统通知中心集成。
 
@@ -67,60 +72,26 @@ PurrPause 当前主要提供休息提醒。新模块用于连接客户已有的�
 - 所有接口应在 5 秒内返回；超时由客户端按失败处理。
 - 第三方必须保证同一条待办消息的 `id` 稳定不变。
 
-### 接口 1：获取待办消息总数
+### 接口：获取待办消息列表
 
-用于高频轮询。该接口应轻量，不返回完整列表。
+PurrPause 只调用这一个接口，既用于展示列表，也用于轮询检测新待办。该接口应轻量。
+
+接口地址由用户在 PurrPause 填写**完整 URL**（第三方可用任意路径，推荐 `/purr-pause/v1/todos`）；PurrPause 只在其后追加 `limit`/`offset`，URL 原有的协议/主机/路径与其余查询参数保持不变。
 
 ```http
-GET /purr-pause/v1/todos/count
+GET https://oa.example.com/purr-pause/v1/todos?limit=30&offset=0
 Authorization: Bearer <token>
 Accept: application/json
 ```
 
-成功响应：
+请求约定：
 
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "total": 12,
-    "unread": 5,
-    "latestChangedAt": "2026-05-26T10:30:00+08:00",
-    "version": "20260526103000"
-  }
-}
-```
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `limit` | number | PurrPause 固定以 `limit ≤ 30`（=「每源待办条数」，1–30，默认 30）轮询，只取最近 N 条 |
+| `offset` | number | PurrPause 固定传 `0`，不翻页 |
 
-字段说明：
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `code` | number | 是 | `0` 表示成功，非 0 表示业务失败 |
-| `message` | string | 是 | 状态说明 |
-| `data.total` | number | 是 | 当前待办总数，用于角标显示 |
-| `data.unread` | number | 否 | 未读数量；没有未读概念时可等于 `total` |
-| `data.latestChangedAt` | string | 推荐 | 待办集合最近变更时间 |
-| `data.version` | string | 推荐 | 待办集合版本号；任一待办新增、删除、状态变化时应改变 |
-
-`latestChangedAt` 或 `version` 至少建议提供一个。只提供 `total` 会有盲区：如果一条旧消息消失、一条新消息出现，总数不变，客户端可能无法感知变化。
-
-### 接口 2：获取待办消息列表
-
-用于应用内消息列表展示，也用于总数变化后刷新本地快照。
-
-```http
-GET /purr-pause/v1/todos?limit=50&offset=0
-Authorization: Bearer <token>
-Accept: application/json
-```
-
-请求参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `limit` | number | 否 | 默认 50，最大 99 |
-| `offset` | number | 否 | 默认 0 |
+第三方需按 `createdAt` 倒序返回，保证截断后保留的是最新待办。
 
 成功响应：
 
@@ -135,15 +106,8 @@ Accept: application/json
         "id": "todo-10086",
         "title": "审批单待处理",
         "summary": "张三提交了采购审批，需要你处理",
-        "source": {
-          "id": "oa",
-          "name": "OA",
-          "color": "#2f80ed"
-        },
         "level": "normal",
-        "status": "pending",
         "createdAt": "2026-05-26T09:30:00+08:00",
-        "updatedAt": "2026-05-26T10:30:00+08:00",
         "targetUrl": "https://example.com/todos/todo-10086"
       }
     ]
@@ -158,24 +122,23 @@ Accept: application/json
 | `id` | string | 是 | 全局稳定唯一 ID |
 | `title` | string | 是 | 列表主标题 |
 | `summary` | string | 否 | 简短描述，建议 120 字以内 |
-| `source.id` | string | 推荐 | 第三方来源标识，例如 `oa`、`jira`、`crm` |
-| `source.name` | string | 推荐 | 第三方来源名称，用于列表标签 |
-| `source.color` | string | 否 | 来源颜色，建议 6 位十六进制色值，例如 `#2f80ed` |
 | `level` | string | 否 | `low` / `normal` / `high` / `urgent` |
-| `status` | string | 否 | `pending` / `processing` / `done` / `cancelled` |
-| `createdAt` | string | 否 | 创建时间 |
-| `updatedAt` | string | 推荐 | 最近更新时间 |
+| `createdAt` | string | 否 | 创建时间，用于排序；缺失时按接口返回顺序 |
 | `targetUrl` | string | 是 | 点击后打开的第三方页面 URL |
 
-客户端只展示 `status` 为 `pending` 或 `processing` 的消息。第三方也可以只返回待办状态的数据。
+客户端不再按状态过滤，会如实展示收到的每一条；第三方应只返回未完成的待办（已完成 / 已取消的不要返回）。
 
-来源字段处理规则：
+来源标签说明：
 
-- `source.id` 缺失时客户端归为 `unknown`。
-- `source.name` 缺失时客户端显示“未知来源”。
-- `source.color` 缺失或非法时客户端按 `source.id` 从内置调色板稳定分配颜色。
-- 客户端不会信任第三方返回的任意 CSS，只接受 `#RRGGBB` 格式色值。
-- 如果客户有多个第三方系统，推荐由客户侧网关聚合为同一套接口，并通过 `source` 字段区分来源。
+- 列表里每条待办的来源标签和颜色，来自用户在 PurrPause 中为该接口配置的源名称，响应本身无需携带来源信息。
+- 点击某条打开 `targetUrl` 后本地清理该条，主进程推回新状态、列表即时移除。
+
+### 点击与本地清理
+
+- 点击待办打开其 `targetUrl`（系统默认浏览器）。
+- 打开成功后 PurrPause **仅本地移除该条**（角标 -1、列表移除），不回写第三方，也不需要第三方提供“已读 / 完成”接口。
+- 后续轮询第三方可继续返回该条：PurrPause 记住本地已清理的 id，不重复提醒、不重复弹动画；第三方按自身业务不再返回时，PurrPause 自然遗忘清理记录。
+- 清理记录仅存内存，重启后已点击但服务端仍在返回的待办会重新出现，但首次轮询只建基线、不弹动画。
 
 ### 错误响应
 
@@ -213,9 +176,9 @@ Accept: application/json
   "messageNotifyEnabled": false,
   "messageApiBaseUrl": "",
   "messageAuthHeaders": "{}",
+  "messageSources": [],
   "messagePollInterval": 60,
-  "messageListLimit": 50,
-  "messageMaxCacheItems": 99,
+  "messageMaxCacheItems": 30,
   "messageNotifyDir": "",
   "messageNotifyVideo": "notify-rocket.webm",
   "messageNotifyAnimation": "rocket-corner"
@@ -225,11 +188,11 @@ Accept: application/json
 | 字段 | 类型 | 默认值 | 校验 |
 |------|------|--------|------|
 | `messageNotifyEnabled` | boolean | `false` | 总开关 |
-| `messageApiBaseUrl` | string | `""` | 启用时必须是 `http:` 或 `https:` URL |
-| `messageAuthHeaders` | string | `"{}"` | JSON 对象字符串 |
-| `messagePollInterval` | number | `60` | 10-3600 秒 |
-| `messageListLimit` | number | `50` | 1-100 |
-| `messageMaxCacheItems` | number | `99` | 10-99，本地最多保留的消息数量 |
+| `messageSources` | array | `[]` | 接口源数组，每项 `{ id, name, listUrl, authHeaders, enabled }`；`listUrl` 是**完整列表接口 URL**，启用源的 `listUrl` 必须是 `http:`/`https:` |
+| `messageApiBaseUrl` | string | `""` | 旧单源字段，仅用于迁移：与约定路径 `/purr-pause/v1/todos` 拼成 `listUrl` 后写入 `messageSources` |
+| `messageAuthHeaders` | string | `"{}"` | 旧单源字段，保留仅用于迁移 |
+| `messagePollInterval` | number | `60` | 10-3600 秒，所有源共用 |
+| `messageMaxCacheItems` | number | `30` | 1-30，每源查询并保留的最近待办条数（同时驱动列表显示与角标封顶） |
 | `messageNotifyDir` | string | `""` | 小火箭素材目录；保存后自动生成 `purr-pause-消息提醒素材说明.txt`；为空时依次查找通用素材目录、用户默认 webm 目录和内置目录 |
 | `messageNotifyVideo` | string | `notify-rocket.webm` | 文件名，不允许路径分隔符 |
 | `messageNotifyAnimation` | string | `rocket-corner` | 预设动画模式 |
@@ -247,14 +210,14 @@ Accept: application/json
 点击后打开独立设置窗口，不混入休息提醒的通用设置窗口。
 
 - `启用消息提醒`：总开关。
-- `服务地址`：第三方服务 Base URL，例如 `https://oa.example.com`。
+- `待办接口地址`：完整的待办列表接口 URL，例如 `https://oa.example.com/purr-pause/v1/todos`；应用只在其后追加 `limit`/`offset`。
 - `接口规范`：下载独立 Markdown 文件 `PurrPause-消息提醒接口规范-v1.md`，只包含第三方接口规范。
 - `请求头`：JSON textarea，例如 `{"Authorization":"Bearer xxx"}`。
 - `轮询间隔`：秒，默认 60。
 - `小火箭素材目录`：可选目录，放置 `notify-rocket.webm`。
 - 选择小火箭素材目录并保存后，客户端在目录下生成 `purr-pause-消息提醒素材说明.txt`。
 - `提醒动画素材`：视频文件名或素材选择。
-- `测试连接`：可选按钮，用于调用 count 接口并展示结果。
+- `测试连接`：可选按钮，用于调用待办列表接口并展示返回条数。
 
 关闭开关时：
 
@@ -291,7 +254,7 @@ Accept: application/json
 3. 加载用户提供的 `notify-rocket.webm`。
 4. 窗口从屏幕角落移动到顶部附近。
 5. 播放完成后自动关闭。
-6. 角标数量保留，直到下一次列表刷新变为 0。
+6. 角标 = 本地保留的待办条数（每源 ≤ 30、已扣除点击清理项），每次轮询按最新快照重算；点击清理一条立即 -1，服务端无待办时归零。
 
 如果新消息连续到来：
 
@@ -310,7 +273,7 @@ Accept: application/json
 
 - 顶部显示总数、最后刷新时间、刷新按钮。
 - 列表项显示标题、摘要、来源、等级、创建时间。
-- 来源以彩色标签展示，颜色来自 `source.color` 或客户端内置调色板。
+- 来源以彩色标签展示，标签名称和颜色取自用户配置的源（颜色由源 id 哈希到内置调色板，稳定分配）。
 - 不同第三方来源的标签位置和样式保持一致，避免用户只靠颜色辨认。
 - 点击列表项调用 `shell.openExternal(item.targetUrl)` 打开第三方网站。
 - URL 必须是 `http:` 或 `https:`，非法 URL 不打开并记录日志。
@@ -319,15 +282,16 @@ Accept: application/json
 
 - 打开窗口时立即拉取列表。
 - 点击刷新按钮时拉取列表。
-- 后台轮询发现版本变化后，如果窗口已打开，则自动刷新列表。
+- 后台轮询刷新后，如果窗口已打开，自动推送新状态并重渲染。
+- 点击某条打开 `targetUrl` 后本地清理该条，主进程推回新状态、列表即时移除。
 
 列表性能策略：
 
-- UI 首屏只渲染当前可见区域；如果实现简单列表，第一版最多渲染 `messageListLimit` 条。
-- 本地内存快照最多保留 `messageMaxCacheItems` 条。
-- 超过上限时按 `updatedAt`、`createdAt` 倒序保留最新消息，丢弃旧消息。
-- 如果第三方返回的 `total` 大于本地保留上限，列表顶部提示“仅显示最近 N 条”。
-- 角标仍使用第三方返回的 `total` 或 `unread`，不受本地丢弃旧消息影响。
+- 列表渲染合并后的全部条目（每源已封顶 `messageMaxCacheItems` ≤ 30）。
+- 本地内存快照每源最多保留 `messageMaxCacheItems` 条（默认 30）。
+- 超过上限时按 `createdAt` 倒序保留最新消息，丢弃旧消息。
+- 如果第三方返回的 `total` 大于本地保留条数，列表顶部提示“仅显示最近 N 条”。
+- 角标取本地保留条数（每源 ≤ 30 之和、已扣除点击清理项），不取自第三方 `total`/`unread`。
 - 列表项中的长标题和摘要必须截断，避免单条消息导致布局抖动。
 
 ## 模块边界
@@ -336,7 +300,7 @@ Accept: application/json
 lib/message-notify.js        # 轮询、差异检测、角标状态、通知生命周期
 renderer/message-list.html   # 待办消息列表窗口
 renderer/message-settings.html # 消息提醒独立设置窗口
-renderer/notification.html   # 小火箭/轻量提醒动画窗口
+renderer/rocket-demo.html    # 小火箭/轻量提醒动画窗口（复用）
 preload.js                   # 增加消息列表和通知 IPC
 main.js                      # 生命周期、托盘入口、配置集成
 renderer/settings.html       # 通用休息提醒设置 UI
@@ -346,16 +310,21 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 
 ### lib/message-notify.js
 
-导出接口：
+工厂函数 `createMessageNotify(config, deps)` 初始化模块（必要时启动轮询），返回以下控制方法：
 
-- `init(config, deps)`：初始化模块，必要时启动轮询。
 - `updateConfig(nextConfig)`：更新配置，开关或关键字段变化时重启。
-- `start()`：立即轮询 count，然后开启定时器。
+- `start()`：立即拉取一次列表（建立基线），然后开启定时器。
 - `stop()`：停止轮询，关闭提醒动画，保留配置。
 - `destroy()`：停止轮询，关闭所有消息相关窗口。
 - `refreshList()`：拉取待办列表。
 - `openMessageList()`：打开或聚焦待办列表窗口。
-- `openMessageTarget(id)`：打开某条消息的 `targetUrl`。
+- `openMessageTarget(id)`：打开某条消息的 `targetUrl`，打开成功后本地清理该条。
+- `dismissNotification()`：关闭当前小火箭动画窗口。
+- `handleRestOverlayChanged(showing)`：休息覆盖层显隐变化通知（结束后补播挂起的提醒）。
+- `getBadgeCount()`：返回当前聚合角标数。
+- `getState()`：返回当前聚合待办状态快照。
+
+> `createMessageNotify.testConnection(formConfig, logger)` 另以静态方法导出，供设置页「测试连接」调用。
 
 依赖由 `main.js` 注入：
 
@@ -363,31 +332,29 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 - `screen`
 - `shell`
 - `preloadPath`
+- `rendererDir`
 - `logger`
-- `getNotifyVideoPath(filename)`
+- `getNotifyMediaUrl(filename)`
 - `isRestOverlayShowing()`
 - `onBadgeChange(count)`：用于刷新托盘菜单。
 
 ## 轮询和差异检测
 
-1. 启用后立即调用 `GET /purr-pause/v1/todos/count`。
-2. 第一次成功只记录 `total`、`unread`、`latestChangedAt`、`version`，不播放动画。
-3. 后续轮询如果 `total`、`latestChangedAt` 或 `version` 发生变化，调用列表接口刷新快照。
-4. 用列表中的 `id` 与本地 `knownIds` 比较，计算新增消息。
-5. 新增消息数大于 0 时：
-   - 更新角标为最新 `total` 或 `unread`。
+1. 启用后按间隔直接 GET 用户配置的 `listUrl`，并在其上追加 `limit=<N≤30>&offset=0`（推荐约定路径为 `/purr-pause/v1/todos`）。
+2. 列表数据进入内存前先标准化：
+   - 过滤掉缺失 `id`/`title` 或 `targetUrl` 非法的项。
+   - 按 `createdAt` 倒序排序，取前 `messageMaxCacheItems`（≤30）条。
+   - 注入来源标签 `origin`（取自用户配置的源 id/name + 内置色板）和唯一键 `uid`。
+3. 把本地「已点击清理」的 id 集合（`clearedIds`）裁剪为「本次返回里仍存在的 id」，再用它过滤掉被清理的条目，得到 `snapshot`。
+4. 用 `snapshot` 中的 `id` 与本地 `knownIds` 比较，计算新增消息；随后把 `snapshot` 的 id 记入 `knownIds`。
+5. 角标设为 `snapshot.length`（每源 ≤ 30），聚合角标为各启用源之和。
+6. **首次同步**只建立基线（填充 `snapshot`/`knownIds`、设角标），不播放动画。
+7. 非首次同步且新增数 > 0 时：
    - 播放一次提醒动画。
-   - 如果列表窗口已打开，自动刷新列表。
-6. 列表数据进入内存前先标准化：
-   - 补齐 `source.id`、`source.name` 和来源颜色。
-   - 过滤非法 `targetUrl`。
-   - 按 `updatedAt`、`createdAt` 倒序排序。
-   - 超过 `messageMaxCacheItems` 时丢弃旧消息。
-7. 如果总数变为 0：
-   - 清空角标。
-   - 清空本地列表快照。
+   - 列表窗口已打开时自动收到新状态并重渲染。
+8. 列表为空（服务端无待办）时 `snapshot` 自然清空、角标归零。
 
-注意：角标显示应以第三方返回的 `total` 或 `unread` 为准，不以“本次新增数量”为准。提醒动画只反映“有新消息到来”。
+注意：角标取本地保留条数（已扣除点击清理项），不取自服务端 `total`/`unread`；提醒动画只反映“有新消息到来”。点击一条待办后本地角标立即 -1。
 
 ## 状态机
 
@@ -395,26 +362,24 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 |------|------|----------|----------|
 | `disabled` | 功能关闭 | 默认或用户关闭开关 | 用户开启且配置有效 |
 | `idle` | 已启用，等待轮询 | 初始化完成 | 定时器触发 |
-| `polling-count` | 正在拉取总数 | 启动或定时器触发 | 成功或失败 |
-| `polling-list` | 正在拉取列表 | 总数/版本变化或用户打开列表 | 成功或失败 |
+| `polling-list` | 正在拉取列表 | 启动、定时器触发、用户打开列表或手动刷新 | 成功或失败 |
 | `notifying` | 正在播放轻量动画 | 检测到新增消息 | 动画结束 |
 | `backoff` | 连续失败后降频 | 连续失败达到阈值 | 下一次成功 |
 
 ## 失败与退避
 
-- count 和 list 接口分别记录失败，但共享退避策略。
-- 连续失败 5 次后轮询间隔翻倍，最大 300 秒。
+- 列表轮询失败按源记录。
+- 连续失败 5 次后该源轮询间隔翻倍，最大 300 秒。
 - 任意一次成功后失败计数归零，恢复用户配置间隔。
 - 失败不播放动画、不弹错误通知。
 - 设置页和待办列表窗口可以显示最后错误，例如“最近同步失败：认证失败”。
 
 ## 来源标注和颜色
 
-待办列表不能只靠文字来源区分。每条消息应展示一个来源标签：
+待办列表不能只靠文字来源区分。每条消息展示一个来源标签，标签信息来自用户在 PurrPause 中配置的源（`messageSources`），响应不携带来源字段：
 
-- 标签文案优先使用 `source.name`。
-- 标签颜色优先使用 `source.color`。
-- 如果颜色缺失，客户端按 `source.id` 哈希到内置色板，保证同一来源颜色稳定。
+- 标签文案使用配置源的 `name`。
+- 标签颜色按配置源的 `id` 哈希到内置色板，保证同一来源颜色稳定。
 - 标签同时使用文字和颜色，不只依赖颜色，照顾色弱用户。
 - `level` 仍用于表示紧急程度，不能和来源颜色混用。
 
@@ -440,27 +405,26 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 }
 ```
 
-第一版不要求设置页编辑这份映射，先以第三方返回字段和内置色板为主。
+第一版不要求设置页编辑这份映射，先以用户配置的源名称和内置色板为主（颜色按源 id 哈希到内置色板）。
 
 ## 性能和消息淘汰
 
 消息提醒模块必须控制内存、渲染和网络成本：
 
-- count 接口高频轮询，list 接口只在 count/version 变化、用户打开列表、手动刷新时调用。
-- list 请求使用 `limit=messageMaxCacheItems&offset=0`，单次最多拉取 99 条，要求第三方按最新更新时间倒序返回。
-- 客户端最多保留 `messageMaxCacheItems` 条消息，默认 99。
-- 超过上限时丢弃旧消息，不写入磁盘，不参与列表渲染。
-- `knownIds` 也需要上限，默认保留最近 2000 个 ID，避免长期运行后无限增长。
-- 列表窗口打开时只渲染 `messageListLimit` 条；后续如果需要展示更多，再做分页或虚拟列表。
-- 如果 `total > messageMaxCacheItems`，角标显示真实总数，列表显示“仅展示最近 99 条”。
+- 只轮询 list 接口；同一源同一时刻只允许一个请求在飞（手动刷新与定时轮询互斥，跳过本轮并重排）。
+- list 请求使用 `limit=messageMaxCacheItems&offset=0`，单次最多拉取 30 条，要求第三方按 `createdAt`（创建时间）倒序返回。
+- 客户端每源最多保留 `messageMaxCacheItems` 条消息，默认 30。
+- 超过上限时丢弃旧消息，不写入磁盘。
+- `knownIds` 有上限（默认保留最近 2000 个 id）；`clearedIds`（点击清理记录）每轮裁剪为「本次返回仍存在的 id」，天然有界（≤ 本次条数），另设安全上限避免轮询间隔内无限堆积。
+- 列表窗口渲染合并后的全部条目（每源已封顶 30）。
+- 如果服务端 `total > 本地保留条数`，列表顶部提示“仅显示最近 N 条”；角标仍取本地保留条数，不取服务端 `total`。
 
 淘汰规则：
 
-1. 优先按 `updatedAt` 倒序。
-2. `updatedAt` 缺失时按 `createdAt` 倒序。
-3. 两者都缺失时按本次接口返回顺序。
-4. 保留前 `messageMaxCacheItems` 条。
-5. 丢弃消息只影响本地展示，不影响第三方系统真实待办。
+1. 按 `createdAt` 倒序。
+2. `createdAt` 缺失时按本次接口返回顺序。
+3. 保留前 `messageMaxCacheItems` 条。
+4. 丢弃消息只影响本地展示，不影响第三方系统真实待办。
 
 ## 安全与隐私
 
@@ -483,12 +447,14 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 
 `preload.js` 新增：
 
-- `onStartMessageNotification(callback)`：接收 `{ videoPath, count, durationMs }`。
-- `onUpdateMessageBadge(callback)`：接收 `{ count }`。
-- `dismissMessageNotification()`：关闭动画窗口。
-- `onLoadMessages(callback)`：消息列表窗口接收列表数据。
+- `onMessagesState(callback)`：列表窗口接收聚合后的待办状态（含 `items`、`badgeCount`、`hiddenCount`、`sources` 等）。
 - `refreshMessages()`：列表窗口请求刷新。
-- `openMessageTarget(id)`：列表窗口请求打开第三方页面。
+- `openMessageTarget(id)`：列表窗口请求打开第三方页面（主进程打开成功后本地清理该条）。
+- `dismissMessageNotification()`：关闭小火箭动画窗口。
+- `testMessageConnection(config)` / `onTestMessageConnectionResult(callback)`：设置页测试连接（只测 list）。
+- `downloadMessageApiSpec()` / `onDownloadMessageApiSpecResult(callback)`：下载第三方接口规范。
+
+> 小火箭动画窗口不走消息 IPC：参数（label、count、mediaUrl、时长）通过 `loadFile` 的 query string 注入；角标变化经主进程 `onBadgeChange` 回调刷新托盘，并随 `messages-state` 推送到列表窗口。
 
 `main.js` 新增：
 
@@ -514,16 +480,16 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 - 固化本文档中的第三方接口规范。
 - 更新默认配置字段。
 - 新建独立消息提醒设置窗口。
-- 支持开启/关闭、Base URL、请求头、轮询间隔、动画素材。
+- 支持开启/关闭、完整列表接口 URL、请求头、轮询间隔、动画素材。
 
 验收：配置可保存；关闭开关时不启动轮询。
 
 ### Phase 2：轮询和角标
 
 - 新建 `lib/message-notify.js`。
-- 实现 count/list 两个接口调用。
-- 实现总数、版本和新增 ID 差异检测。
-- 实现来源字段标准化、内置色板和消息淘汰上限。
+- 实现 list 接口轮询。
+- 实现基于返回项 id 与本地 `knownIds` 的新增差异检测。
+- 实现来源标签注入（取自配置源）、内置色板和每源 30 条淘汰上限。
 - 托盘菜单显示 `待办消息（N）`。
 
 验收：本地 mock 服务返回不同数量时，角标正确更新。
@@ -540,7 +506,7 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 
 ### Phase 4：轻量动画提醒
 
-- 新建或复用 `renderer/notification.html`。
+- 复用 `renderer/rocket-demo.html`。
 - 实现小火箭素材播放和窗口位移动画。
 - 设置窗口为点击穿透、不抢焦点、不占任务栏。
 - 新增消息时播放一次，连续新增时合并提醒。
@@ -560,30 +526,32 @@ assets/webm/notify-rocket.webm # 可选内置示例素材
 
 1. 默认关闭消息提醒，不发起任何第三方请求。
 2. 开启后配置无效 URL，保存失败或提示错误。
-3. 配置 mock 第三方接口后，客户端按间隔调用 count 接口。
-4. count 变化后调用 list 接口。
-5. 首次同步不播放动画。
-6. 新增消息后角标更新。
-7. 新增消息后小火箭动画播放一次并自动消失。
-8. 动画播放期间鼠标点击能穿透到后方窗口。
-9. 托盘菜单显示 `待办消息（N）`。
-10. 点击托盘入口打开待办消息列表。
-11. 点击托盘 `消息提醒设置` 打开独立消息提醒设置窗口。
-12. 不同 `source.id` 的消息显示不同来源标签和稳定颜色。
-13. 第三方未返回 `source.color` 时，客户端自动分配稳定颜色。
-14. 消息数量超过 `messageMaxCacheItems` 后，旧消息被丢弃，列表只显示最近 N 条。
-15. 点击列表项打开第三方 `targetUrl`。
-16. 关闭消息提醒开关后停止轮询、关闭动画窗口、隐藏角标。
-17. 第三方接口连续失败后进入退避。
-18. 休息提醒显示时不播放消息动画，但角标仍更新。
-19. 休息提醒结束后可以合并播放一次消息提醒动画。
+3. 配置 mock 第三方接口后，客户端**只**按间隔调用 list 接口（`/todos`），完全不请求 `/todos/count`。
+4. 首次同步建立基线、不播放动画；列表能看到条目，角标 = 条数（≤30）。
+5. mock 新增一条新 id：下次轮询播放一次小火箭、角标 +1、列表出现新条目。
+6. 点击一条：浏览器打开其 `targetUrl`，该条从列表消失、角标 -1；下次轮询即使 mock 仍返回它也不再出现、不再弹动画。
+7. mock 返回 >30 条：本地只保留 30、列表顶部提示“仅显示最近 30 条”、角标 = 30。
+8. 设置页把「每源待办条数」改为如 5 并保存：查询/保留/显示都变 5。
+9. 动画播放期间鼠标点击能穿透到后方窗口。
+10. 托盘菜单显示 `待办消息（N）`，点击打开列表；`消息提醒设置` 打开独立设置窗口。
+11. 「测试连接」只测 list，成功显示“列表返回 N 条”。
+12. 配置多个源时，各源的待办显示各自的来源标签和稳定颜色（颜色由源 id 哈希到内置色板分配）。
+13. 关闭消息提醒开关后停止轮询、关闭动画窗口、隐藏角标。
+14. 第三方接口连续失败 5 次后进入退避（间隔翻倍），恢复后归位。
+15. 休息提醒显示时不播放消息动画但角标仍更新；结束后合并补播一次。
 
-## 待确认决策
+## 已确认决策（2026-05 重构）
 
-- 角标使用 `total` 还是 `unread`，如果第三方没有未读概念，建议使用 `total`。
+- 角标取本地保留的待办条数（每源 ≤ 30 之和），不再取服务端 `total`/`unread`。
+- 去掉 count 接口，直接轮询 list。
+- 每源固定上限 30，可配置（1–30，默认 30），同时驱动查询 limit、本地保留、列表显示、角标封顶。
+- 点击待办打开 `targetUrl` 后本地清理该条，不回写第三方、不需要已读接口。
+- 来源标签和颜色由用户在 PurrPause 配置的源决定（响应不携带 `source`），颜色按源 id 哈希到内置色板。
+- 源配置改为用户填**完整列表接口 URL**（`listUrl`），应用只在其后追加 `limit`/`offset`；`/purr-pause/v1/todos` 为推荐约定路径，第三方可挂任意路径，不再强制挂主机根路径。旧 `messageApiBaseUrl`/源 `baseUrl` 自动迁移为 `listUrl`。
+
+## 仍待确认
+
 - 第三方 `targetUrl` 是否必须同域名；如果需要限制，应增加允许域名配置。
 - 是否内置默认小火箭素材；如果不内置，需要在设置页明确提示用户提供素材。
-- 待办列表窗口入口只放托盘菜单，还是设置页也放一个“打开待办”按钮。
 - 消息提醒是否作为激活用户功能；如果是，需要在保存配置和 UI 上加授权限制。
-- `messageMaxCacheItems` 默认 99；如果客户待办量很大，是否仍只保留最近 99 条，还是后续另做分页。
-- 第三方来源颜色由第三方返回，还是由客户在 PurrPause 设置中统一配置。
+- 每源 30 条对待办量很大的客户是否足够，是否后续做分页/虚拟列表。

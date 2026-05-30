@@ -42,9 +42,9 @@ const DEFAULT_CONFIG = {
   messageNotifyEnabled: false,
   messageApiBaseUrl: '',
   messageAuthHeaders: '{}',
+  messageSources: [],
   messagePollInterval: 60,
-  messageListLimit: 50,
-  messageMaxCacheItems: 99,
+  messageMaxCacheItems: 30,
   messageNotifyDir: '',
   messageNotifyVideo: 'notify-rocket.webm',
   messageNotifyAnimation: 'rocket-corner'
@@ -104,18 +104,81 @@ function normalizeMessageAuthHeaders(value) {
   return JSON.stringify(parsed);
 }
 
+function genSourceId() {
+  return 'src-' + Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+}
+
+function migrateMessageSources(config) {
+  if (!config || typeof config !== 'object') return;
+  const sources = Array.isArray(config.messageSources) ? config.messageSources : [];
+  // 旧单源迁移：仅当当前没有任何源且旧 baseUrl 合法时执行（幂等）
+  if (sources.length === 0) {
+    const legacyBaseUrl = String(config.messageApiBaseUrl || '').trim();
+    if (isHttpUrl(legacyBaseUrl)) {
+      config.messageSources = [{
+        id: genSourceId(),
+        name: '默认接口',
+        listUrl: createMessageNotify.resolveListUrl({ baseUrl: legacyBaseUrl }),
+        authHeaders: String(config.messageAuthHeaders || '{}').trim() || '{}',
+        enabled: config.messageNotifyEnabled === true
+      }];
+      // 旧单源已迁移进 messageSources，清空旧字段，避免日后删除该源后下次启动又被复活。
+      config.messageApiBaseUrl = '';
+      config.messageAuthHeaders = '{}';
+      return;
+    }
+    config.messageSources = [];
+    return;
+  }
+  // 已有源：逐源补默认值/规整，并保证 id 非空且唯一
+  const seenIds = new Set();
+  config.messageSources = sources.map((raw) => {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    let id = String(source.id || '').trim();
+    if (!id || seenIds.has(id)) {
+      id = genSourceId();
+    }
+    seenIds.add(id);
+    return {
+      id,
+      name: String(source.name || '').trim() || '未命名',
+      listUrl: createMessageNotify.resolveListUrl(source),
+      authHeaders: String(source.authHeaders || '{}').trim() || '{}',
+      enabled: !!source.enabled
+    };
+  });
+}
+
 function applyMessageConfig(newConfig) {
   const enabled = !!newConfig.messageNotifyEnabled;
-  const baseUrl = String(newConfig.messageApiBaseUrl || '').trim();
-  if (enabled && !isHttpUrl(baseUrl)) {
-    return { success: false, error: '启用消息提醒时，服务地址必须是 http 或 https URL' };
-  }
 
-  let authHeaders = '{}';
-  try {
-    authHeaders = normalizeMessageAuthHeaders(newConfig.messageAuthHeaders);
-  } catch (e) {
-    return { success: false, error: e.message };
+  // 逐源校验并规整为干净对象
+  const rawSources = Array.isArray(newConfig.messageSources) ? newConfig.messageSources : [];
+  const cleanSources = [];
+  const usedIds = new Set();
+  for (let i = 0; i < rawSources.length; i++) {
+    const raw = rawSources[i] && typeof rawSources[i] === 'object' ? rawSources[i] : {};
+    const name = String(raw.name || '').trim();
+    if (!name) {
+      return { success: false, error: '第 ' + (i + 1) + ' 个接口源名称不能为空' };
+    }
+    const sourceEnabled = !!raw.enabled;
+    const listUrl = createMessageNotify.resolveListUrl(raw);
+    if (sourceEnabled && !isHttpUrl(listUrl)) {
+      return { success: false, error: '「' + name + '」的接口地址必须是 http 或 https URL' };
+    }
+    let authHeaders = '{}';
+    try {
+      authHeaders = normalizeMessageAuthHeaders(raw.authHeaders);
+    } catch (e) {
+      return { success: false, error: '「' + name + '」的请求头格式错误：' + e.message };
+    }
+    let id = String(raw.id || '').trim() || genSourceId();
+    while (usedIds.has(id)) {
+      id = genSourceId();
+    }
+    usedIds.add(id);
+    cleanSources.push({ id, name, listUrl, authHeaders, enabled: sourceEnabled });
   }
 
   const filename = String(newConfig.messageNotifyVideo || '').trim() || DEFAULT_CONFIG.messageNotifyVideo;
@@ -124,11 +187,9 @@ function applyMessageConfig(newConfig) {
   }
 
   config.messageNotifyEnabled = enabled;
-  config.messageApiBaseUrl = baseUrl;
-  config.messageAuthHeaders = authHeaders;
+  config.messageSources = cleanSources;
   config.messagePollInterval = clampNumber(newConfig.messagePollInterval, 10, 3600, DEFAULT_CONFIG.messagePollInterval);
-  config.messageListLimit = clampNumber(newConfig.messageListLimit, 1, 100, DEFAULT_CONFIG.messageListLimit);
-  config.messageMaxCacheItems = clampNumber(newConfig.messageMaxCacheItems, 10, 99, DEFAULT_CONFIG.messageMaxCacheItems);
+  config.messageMaxCacheItems = clampNumber(newConfig.messageMaxCacheItems, 1, 30, DEFAULT_CONFIG.messageMaxCacheItems);
   if (newConfig.messageNotifyDir !== undefined) {
     const dir = String(newConfig.messageNotifyDir || '').trim();
     if (dir) {
@@ -148,6 +209,10 @@ function applyMessageConfig(newConfig) {
   }
   config.messageNotifyVideo = filename;
   config.messageNotifyAnimation = 'rocket-corner';
+  // 用户已通过多源 UI 保存，旧单源字段（messageApiBaseUrl/messageAuthHeaders）已无意义；
+  // 清空以防 messageSources 被清空后，旧 baseUrl 在下次启动时把已删除的源复活。
+  config.messageApiBaseUrl = '';
+  config.messageAuthHeaders = '{}';
   return { success: true };
 }
 
@@ -228,9 +293,14 @@ function loadConfig() {
     const configPath = fs.existsSync(USER_CONFIG_PATH) ? USER_CONFIG_PATH : DEFAULT_CONFIG_PATH;
     const data = fs.readFileSync(configPath, 'utf-8');
     config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+    migrateMessageSources(config);
+    // 旧配置迁移：messageMaxCacheItems 上限由 99 收紧到 30；移除已废弃的 messageListLimit。
+    config.messageMaxCacheItems = clampNumber(config.messageMaxCacheItems, 1, 30, DEFAULT_CONFIG.messageMaxCacheItems);
+    delete config.messageListLimit;
   } catch (e) {
     console.error('[purr-pause] Config load failed, using defaults:', e.message);
     config = { ...DEFAULT_CONFIG };
+    migrateMessageSources(config);
   }
 }
 
@@ -1013,7 +1083,7 @@ function openMessageSettings() {
 
   const display = screen.getPrimaryDisplay();
   const { width: sw, height: sh } = display.workArea;
-  const winW = 400;
+  const winW = Math.min(540, Math.max(360, sw - 80));
   const maxH = Math.round(sh * 0.8);
 
   messageSettingsWin = new BrowserWindow({
@@ -1154,8 +1224,8 @@ ipcMain.on('save-config', (event, newConfig) => {
   const hasMessageConfig = Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyEnabled')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageApiBaseUrl')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageAuthHeaders')
+    || Object.prototype.hasOwnProperty.call(newConfig, 'messageSources')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messagePollInterval')
-    || Object.prototype.hasOwnProperty.call(newConfig, 'messageListLimit')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageMaxCacheItems')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyDir')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyVideo');
