@@ -244,7 +244,7 @@ Accept: application/json
 - 窗口位置从主屏幕右下角或左下角开始，沿屏幕边缘向上移动。
 - 使用 `setIgnoreMouseEvents(true, { forward: true })`，让鼠标事件穿透，不影响工作。
 - `focusable: false`、`skipTaskbar: true`，不抢焦点、不出现在任务栏。
-- 动画只播放一次，建议 2-4 秒后自动销毁窗口。
+- 动画只播放一次，约 7 秒后自动销毁窗口。
 - 动画窗口只覆盖小区域，不创建全屏覆盖层。
 
 小火箭示例流程：

@@ -23,7 +23,7 @@
 ### Ubuntu / Debian
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.2.1_amd64.deb
+sudo dpkg -i dist/purr-pause_1.3.0_amd64.deb
 ```
 
 ### 从源码运行
@@ -38,7 +38,7 @@ npm start
 ## 使用
 
 1. 安装后自动在系统托盘显示肥猫图标
-2. 右键托盘图标可以：暂停监控、设置时间、计时规则、查看日志、立即测试、激活/续期、退出
+2. 右键托盘图标可以：暂停监控、设置、计时规则、查看日志、立即测试、激活/续期、退出
 3. 托盘菜单显示激活状态、距下次休息的剩余时间和软件版本号
 4. 屏幕使用时间到达阈值后，猫咪自动出现在所有显示器上
 5. 可点击"再等 5 分钟"延后休息（最多 2 次）
@@ -105,27 +105,30 @@ node tools/keygen.js --verify <序列号>               # 验证
 
 ## 打包
 
-### 打包 Linux deb（推荐）
+### 打包 Linux 包（deb / AppImage，x64 / arm64）
 
-一键脚本：自动定位项目根目录、检查 node/npm、缺依赖时自动 `npm install`，结束后打印产物路径与大小。
+一键脚本：自动定位项目根目录、检查 node/npm/binutils、缺依赖时自动 `npm install`，结束后列出全部产物与大小。
 
 ```bash
-./scripts/build-deb.sh          # 等价于 npm run build:linux
-bash scripts/build-deb.sh       # 没有执行权限时这样跑
+./scripts/build-deb.sh                 # 当前主机架构的 deb（默认）
+./scripts/build-deb.sh --arm64         # arm64 的 deb（x64 主机可交叉打包，无需 ARM 机器）
+./scripts/build-deb.sh --appimage      # 同时产出 AppImage（与 deb 一起）
+./scripts/build-deb.sh --all           # deb + AppImage，x64 + arm64（共 4 个产物）
+bash scripts/build-deb.sh              # 没有执行权限时这样跑
 ```
 
-- 产物位于 `dist/purr-pause_<版本>_amd64.deb`（版本号取自 `package.json`）。
-- 额外参数会透传给 electron-builder，例如：`./scripts/build-deb.sh --publish never`。
+- 产物位于 `dist/`：`purr-pause_<版本>_amd64.deb`、`purr-pause_<版本>_arm64.deb`、`purr-pause-<版本>.AppImage`、`purr-pause-<版本>-arm64.AppImage`（版本号取自 `package.json`）。
+- 本项目无原生依赖，可在 x64 主机上交叉打包 arm64；额外参数会原样透传给 electron-builder，例如：`./scripts/build-deb.sh --publish never`。
 
 ### 其他平台
 
 ```bash
-npm run build:linux   # Ubuntu deb（上面脚本的底层命令）
-npm run build:mac     # macOS dmg (需在 Mac 上)
-npm run build:win     # Windows exe (需在 Windows 上)
+npm run build:linux:all   # Linux deb + AppImage，x64 + arm64（一次产出 4 个）
+npm run build:mac         # macOS dmg (需在 Mac 上)
+npm run build:win         # Windows exe (需在 Windows 上)
 ```
 
-详细打包说明见 [docs/build-guide.md](docs/build-guide.md)。
+推送 `v*` tag 时，GitHub Actions 会自动在三平台构建并发布 Release（Linux 含 deb + AppImage、x64 + arm64）。详细打包说明见 [docs/build-guide.md](docs/build-guide.md)。
 
 ## 技术栈
 
@@ -140,12 +143,19 @@ npm run build:win     # Windows exe (需在 Windows 上)
 purr-pause/
 ├── main.js              # Electron 主进程
 ├── preload.js           # IPC 桥接
-├── lib/license.js       # 序列号验证 & 激活管理
+├── lib/
+│   ├── license.js       # 序列号验证 & 激活管理
+│   ├── message-notify.js # 消息提醒（小火箭）轮询与动画
+│   └── logger.js        # 日志
 ├── tools/keygen.js      # 序列号生成器（CLI）
 ├── renderer/
 │   ├── index.html       # 猫咪动画覆盖层
 │   ├── settings.html    # 设置窗口
-│   └── activation.html  # 激活窗口
+│   ├── activation.html  # 激活窗口
+│   ├── message-list.html # 待办消息列表
+│   ├── message-settings.html # 消息提醒设置
+│   ├── rocket-demo.html # 小火箭演示
+│   └── rules.html       # 计时规则说明
 ├── assets/
 │   ├── images/
 │   │   ├── logo.png          # 应用 logo 源图

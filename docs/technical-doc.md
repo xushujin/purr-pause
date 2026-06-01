@@ -5,7 +5,7 @@
 胖猫暂停一下（PurrPause） 是一款基于 Electron 的桌面应用程序，运行于 Linux、macOS 和 Windows 系统。当用户连续使用电脑超过设定时间后，一只胖猫会走上屏幕，提醒用户休息。
 
 - **应用名称**: 胖猫暂停一下（PurrPause）
-- **版本**: 1.2.0
+- **版本**: 1.3.0
 - **许可证**: MIT
 - **应用 ID**: com.purr-pause.app
 
@@ -61,13 +61,22 @@ purr-pause/
 ├── config.json              # 默认配置文件
 ├── package.json             # 项目配置与构建脚本
 ├── lib/
-│   └── license.js           # 序列号验证与激活管理
+│   ├── license.js           # 序列号验证与激活管理
+│   ├── logger.js            # 日志记录
+│   └── message-notify.js    # 消息提醒（小火箭）轮询与通知
 ├── tools/
-│   └── keygen.js            # 序列号生成器（开发者用）
+│   ├── keygen.js            # 序列号生成器（开发者用）
+│   ├── uninstall-linux.sh   # Linux 卸载脚本
+│   ├── uninstall-mac.sh     # macOS 卸载脚本
+│   └── uninstall-windows.ps1 # Windows 卸载脚本
 ├── renderer/
 │   ├── index.html           # 猫咪动画渲染页面
 │   ├── settings.html        # 设置界面
-│   └── activation.html      # 激活窗口
+│   ├── activation.html      # 激活窗口
+│   ├── rules.html           # 计时规则说明窗口
+│   ├── message-list.html    # 待办消息列表窗口
+│   ├── message-settings.html # 消息提醒设置窗口
+│   └── rocket-demo.html     # 小火箭消息提醒动画窗口
 ├── assets/
 │   ├── webm/                # 内置视频素材
 │   │   ├── cat-walk.webm    # 猫走路动画
@@ -245,6 +254,15 @@ macOS 下原先的 `ioreg | grep -c CGSSessionScreenLockedTime` 降级检测在�
 | `walkVideo` | string | `cat-walk.webm` | — | 走路动画文件名 |
 | `idleVideo` | string | `cat-rest.webm` | — | 休息动画文件名 |
 | `customWebmDir` | string | `""` | — | 自定义素材目录路径（仅激活用户） |
+| `messageNotifyEnabled` | boolean | `false` | — | 是否启用消息提醒（小火箭） |
+| `messageApiBaseUrl` | string | `""` | — | 消息接口基础地址（兼容旧配置） |
+| `messageAuthHeaders` | string | `"{}"` | — | 消息接口请求头 JSON（兼容旧配置） |
+| `messageSources` | array | `[]` | — | 消息接口源列表（名称/地址/请求头/启用） |
+| `messagePollInterval` | number | 60 | 10-3600 | 消息轮询间隔（秒） |
+| `messageMaxCacheItems` | number | 30 | 1-30 | 消息本地缓存条数上限 |
+| `messageNotifyDir` | string | `""` | — | 小火箭素材目录 |
+| `messageNotifyVideo` | string | `notify-rocket.webm` | — | 小火箭动画文件名 |
+| `messageNotifyAnimation` | string | `rocket-corner` | — | 小火箭动画模式 |
 
 #### 配置保存
 
@@ -259,11 +277,14 @@ macOS 下原先的 `ioreg | grep -c CGSSessionScreenLockedTime` 降级检测在�
 - 菜单显示：
   - 激活状态（试用中/已激活/未激活）
   - 距下次休息剩余时间（仅分钟数变化时更新菜单，避免闪动）
+  - 待办消息（未读数）
+  - 消息提醒设置
   - 暂停监控（子菜单：30 分钟 / 1 小时 / 2 小时 / 直到手动恢复）
   - 激活/续期
   - 设置
   - 计时规则（独立窗口展示计时判断逻辑）
   - 查看日志（打开日志文件）
+  - 小火箭演示
   - 立即测试
   - 重置计时
   - 版本号
@@ -293,6 +314,14 @@ macOS 下原先的 `ioreg | grep -c CGSSessionScreenLockedTime` 降级检测在�
 | `skip-activation` | Activation → Main | 跳过激活 |
 | `license-status` | Main → Activation | 发送许可证状态和机器码 |
 | `activation-result` | Main → Activation | 返回激活结果 |
+| `save-config-result` | Main → Settings | 返回配置保存结果 |
+| `download-message-api-spec` | Settings → Main | 请求下载消息提醒接口规范 |
+| `download-message-api-spec-result` | Main → Settings | 返回接口规范下载结果 |
+| `refresh-messages` | Renderer → Main | 手动刷新消息列表 |
+| `open-message-target` | Renderer → Main | 打开指定消息的目标链接 |
+| `dismiss-message-notification` | Renderer → Main | 关闭小火箭消息通知 |
+| `test-message-connection` / `test-message-connection-result` | 双向 | 测试消息接口连通性 |
+| `messages-state` | Main → Renderer | 推送消息列表状态 |
 
 ### 5.2 Preload 暴露的 API
 
@@ -311,6 +340,15 @@ window.electronAPI = {
   skipActivation()            // 跳过激活
   onActivationResult(callback) // 监听激活结果
   onLicenseStatus(callback)   // 监听许可证状态（含 machineId）
+  onSaveConfigResult(callback) // 监听配置保存结果
+  downloadMessageApiSpec()    // 请求下载消息提醒接口规范
+  onDownloadMessageApiSpecResult(callback) // 监听接口规范下载结果
+  onMessagesState(callback)   // 监听消息列表状态
+  refreshMessages()           // 手动刷新消息
+  openMessageTarget(id)       // 打开消息目标链接
+  dismissMessageNotification() // 关闭小火箭消息通知
+  testMessageConnection(config) // 测试消息接口连通性
+  onTestMessageConnectionResult(callback) // 监听测试结果
 }
 ```
 
@@ -468,6 +506,7 @@ machineId = sha256(parts.join('|')).substring(0, 16);
   "preload.js",
   "lib/**/*",
   "renderer/**/*",
+  "docs/message-api-spec.md",
   "config.json",
   "!tools"
 ],
@@ -495,7 +534,7 @@ machineId = sha256(parts.join('|')).substring(0, 16);
 无外部 npm 运行时依赖。应用仅依赖 Electron 内置模块：
 
 - `electron` (app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, shell, powerMonitor)
-- Node.js 内置模块：`path`, `fs`, `child_process`
+- Node.js 内置模块：`path`, `fs`, `child_process`, `url`
 
 ### 11.2 开发依赖
 

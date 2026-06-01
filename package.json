@@ -1,6 +1,6 @@
 {
   "name": "purr-pause",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "胖猫暂停一下（PurrPause）- 一只胖猫提醒你适时休息",
   "main": "main.js",
   "scripts": {
@@ -9,6 +9,10 @@
     "rocket-demo": "electron . --rocket-demo",
     "build": "electron-builder",
     "build:linux": "electron-builder --linux deb",
+    "build:linux:arm64": "electron-builder --linux deb --arm64",
+    "build:appimage": "electron-builder --linux AppImage",
+    "build:appimage:arm64": "electron-builder --linux AppImage --arm64",
+    "build:linux:all": "electron-builder --linux deb AppImage --x64 --arm64",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:all": "electron-builder --linux deb --mac --win"

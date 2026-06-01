@@ -21,10 +21,12 @@ jobs:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
       - name: Install build tools
+        # deb 依赖 binutils(ar/strip) 与 xz-utils；AppImage 及 arm64 交叉打包所需的
+        # 对应架构 Electron 与 appimagetool 由 electron-builder 自动下载，无需额外 apt 包。
         run: sudo apt-get install -y xz-utils binutils
 
-      - name: Build
-        run: npm run build:linux
+      - name: Build deb + AppImage (x64 + arm64)
+        run: npm run build:linux:all
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -32,7 +34,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: purr-pause-linux
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/*.AppImage
 
   build-mac:
     runs-on: macos-latest

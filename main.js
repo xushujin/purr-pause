@@ -225,6 +225,11 @@ function getLinuxAutostartPath() {
 }
 
 function getLinuxLaunchCommand() {
+  // AppImage 运行时 process.execPath 指向临时挂载点（/tmp/.mount_*），重启后失效；
+  // 必须用 process.env.APPIMAGE（.AppImage 文件自身的真实路径）写自启 Exec。
+  if (process.env.APPIMAGE) {
+    return quoteDesktopExecPart(process.env.APPIMAGE);
+  }
   if (app.isPackaged) {
     return quoteDesktopExecPart(process.execPath);
   }

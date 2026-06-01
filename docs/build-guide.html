@@ -102,7 +102,7 @@
 <h2>环境要求</h2>
 <table>
     <tr><th>平台</th><th>系统要求</th><th>工具要求</th></tr>
-    <tr><td>Ubuntu (.deb)</td><td>Ubuntu 18.04+ 或任意 Linux</td><td>Node.js 18+, npm, xz-utils, binutils</td></tr>
+    <tr><td>Linux (.deb / AppImage)</td><td>Ubuntu 18.04+ 或任意 Linux（x64 / arm64）</td><td>Node.js 18+, npm, xz-utils, binutils</td></tr>
     <tr><td>macOS (.dmg)</td><td>macOS 11+</td><td>Node.js 18+, npm, Xcode Command Line Tools</td></tr>
     <tr><td>Windows (.exe)</td><td>Windows 10+</td><td>Node.js 18+, npm</td></tr>
 </table>
@@ -123,20 +123,36 @@ npm install</code></pre>
 
 <hr>
 
-<h2>Ubuntu 打包 (.deb)</h2>
+<h2>Linux 打包 (.deb / AppImage)</h2>
 
 <h3>额外依赖</h3>
 <pre><code>sudo apt-get install -y xz-utils binutils</code></pre>
 
 <h3>打包命令</h3>
-<pre><code>npm run build:linux</code></pre>
+<pre><code># 当前主机架构的 deb（默认）
+npm run build:linux
+
+# arm64 的 deb（x64 主机可交叉打包，无需 ARM 机器）
+npm run build:linux:arm64
+
+# AppImage（x64 / arm64，免安装、双击即用）
+npm run build:appimage
+npm run build:appimage:arm64
+
+# 一次性产出全部 4 个 Linux 产物（deb + AppImage，x64 + arm64）
+npm run build:linux:all</code></pre>
+
+<div class="note">本项目无原生依赖，可在 x64 主机上交叉打包 arm64：electron-builder 会自动下载对应架构的 Electron 与 appimagetool，无需额外 apt 包。</div>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause_1.2.0_amd64.deb</code></pre>
+<pre><code>dist/purr-pause_1.3.0_amd64.deb           # x64 deb
+dist/purr-pause_1.3.0_arm64.deb           # arm64 deb
+dist/purr-pause-1.3.0.AppImage            # x64 AppImage
+dist/purr-pause-1.3.0-arm64.AppImage      # arm64 AppImage</code></pre>
 
 <h3>安装 / 卸载</h3>
 <pre><code># 安装
-sudo dpkg -i dist/purr-pause_1.2.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.3.0_amd64.deb
 
 # 卸载
 sudo dpkg -r purr-pause</code></pre>
@@ -158,7 +174,7 @@ sudo dpkg -r purr-pause</code></pre>
 <pre><code>npm run build:mac</code></pre>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause-1.2.0.dmg</code></pre>
+<pre><code>dist/purr-pause-1.3.0.dmg</code></pre>
 
 <h3>同时打包 Intel + Apple Silicon 版本</h3>
 <pre><code>npm run build:mac -- --arm64 --x64</code></pre>
@@ -173,7 +189,7 @@ sudo dpkg -r purr-pause</code></pre>
 <pre><code>npm run build:win</code></pre>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause-Setup-1.2.0.exe</code></pre>
+<pre><code>dist/purr-pause-Setup-1.3.0.exe</code></pre>
 
 <div class="warn">未签名的安装包会触发 Windows SmartScreen 警告，用户需要点击"更多信息" → "仍要运行"。</div>
 
@@ -186,11 +202,11 @@ npm run build:win</code></pre>
 
 <h2>GitHub Actions 自动构建（推荐）</h2>
 
-<p>推送 tag 后自动在三个平台上构建，无需本地配置多平台环境。</p>
+<p>推送 tag 后自动在三个平台上构建，无需本地配置多平台环境。Linux 侧产出 deb + AppImage（x64 + arm64）共 4 个产物，macOS 产出 Intel + Apple Silicon 双架构 dmg。</p>
 
 <h3>触发方式</h3>
-<pre><code>git tag v1.2.0
-git push origin v1.2.0</code></pre>
+<pre><code>git tag v1.3.0
+git push origin v1.3.0</code></pre>
 
 <p>构建完成后在 GitHub Actions 页面下载产物。</p>
 
@@ -224,9 +240,18 @@ purr-pause/<br>
 ├── preload.js &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# IPC 桥接<br>
 ├── config.json &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 默认配置<br>
 ├── package.json &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 项目配置 &amp; 打包配置<br>
+├── lib/<br>
+│&nbsp;&nbsp; ├── license.js&nbsp;# 激活/授权逻辑<br>
+│&nbsp;&nbsp; ├── message-notify.js&nbsp;# 消息提醒<br>
+│&nbsp;&nbsp; └── logger.js&nbsp;# 日志<br>
 ├── renderer/<br>
 │&nbsp;&nbsp; ├── index.html &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 猫咪动画覆盖层<br>
-│&nbsp;&nbsp; └── settings.html &nbsp;&nbsp;&nbsp;# 设置窗口<br>
+│&nbsp;&nbsp; ├── settings.html &nbsp;&nbsp;&nbsp;# 设置窗口<br>
+│&nbsp;&nbsp; ├── activation.html&nbsp;# 激活窗口<br>
+│&nbsp;&nbsp; ├── message-list.html&nbsp;# 消息列表<br>
+│&nbsp;&nbsp; ├── message-settings.html&nbsp;# 消息提醒设置<br>
+│&nbsp;&nbsp; ├── rocket-demo.html&nbsp;# 小火箭演示<br>
+│&nbsp;&nbsp; └── rules.html&nbsp;# 规则说明<br>
 ├── assets/<br>
 │&nbsp;&nbsp; ├── images/<br>
 │&nbsp;&nbsp; │&nbsp;&nbsp; ├── logo.png<br>

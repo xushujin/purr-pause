@@ -4,7 +4,7 @@
 
 | 平台 | 系统要求 | 工具要求 |
 |------|---------|---------|
-| Ubuntu (.deb) | Ubuntu 18.04+ 或任意 Linux | Node.js 18+, npm, `xz-utils`, `binutils` |
+| Linux (.deb / AppImage) | Ubuntu 18.04+ 或任意 Linux（x64 / arm64） | Node.js 18+, npm, `xz-utils`, `binutils` |
 | macOS (.dmg) | macOS 11+ | Node.js 18+, npm, Xcode Command Line Tools |
 | Windows (.exe) | Windows 10+ | Node.js 18+, npm |
 
@@ -33,7 +33,7 @@ npm start
 
 ---
 
-## Ubuntu 打包 (.deb)
+## Linux 打包 (.deb / AppImage)
 
 ### 额外依赖
 
@@ -44,19 +44,35 @@ sudo apt-get install -y xz-utils binutils
 ### 打包命令
 
 ```bash
+# 当前主机架构的 deb（默认）
 npm run build:linux
+
+# arm64 的 deb（x64 主机可交叉打包，无需 ARM 机器）
+npm run build:linux:arm64
+
+# AppImage（x64 / arm64，免安装、双击即用）
+npm run build:appimage
+npm run build:appimage:arm64
+
+# 一次性产出全部 4 个 Linux 产物（deb + AppImage，x64 + arm64）
+npm run build:linux:all
 ```
+
+> 本项目无原生依赖，可在 x64 主机上交叉打包 arm64：electron-builder 会自动下载对应架构的 Electron 预编译包；AppImage 所需的 appimagetool 也会在构建时自动下载，无需额外 apt 包。
 
 ### 产物位置
 
 ```
-dist/purr-pause_1.2.0_amd64.deb
+dist/purr-pause_1.3.0_amd64.deb           # x64 deb
+dist/purr-pause_1.3.0_arm64.deb           # arm64 deb
+dist/purr-pause-1.3.0.AppImage            # x64 AppImage
+dist/purr-pause-1.3.0-arm64.AppImage      # arm64 AppImage
 ```
 
 ### 安装测试
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.2.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.3.0_amd64.deb
 ```
 
 通过 `sudo dpkg -i` 安装时，deb 的 `afterInstall` 脚本会先把 `/opt/purr-pause/chrome-sandbox` 设置为 `root:root` 和 `4755`，避免 Electron 启动时报 SUID sandbox 权限错误；随后为执行 sudo 的桌面用户写入 `~/.config/autostart/purr-pause.desktop`，用于 Ubuntu 登录后自启动。应用内设置页的“开机自动启动”开关读写同一个文件。
@@ -94,8 +110,8 @@ npm run build:mac
 ### 产物位置
 
 ```
-dist/purr-pause-1.2.0.dmg
-dist/purr-pause-1.2.0-arm64.dmg  (Apple Silicon)
+dist/purr-pause-1.3.0.dmg
+dist/purr-pause-1.3.0-arm64.dmg  (Apple Silicon)
 ```
 
 ### 安装测试
@@ -124,7 +140,7 @@ npm run build:win
 ### 产物位置
 
 ```
-dist/purr-pause-Setup-1.2.0.exe
+dist/purr-pause-Setup-1.3.0.exe
 ```
 
 ### 安装测试
@@ -145,7 +161,7 @@ dist/purr-pause-Setup-1.2.0.exe
 
 ## 使用 GitHub Actions 自动构建（推荐）
 
-仓库已包含 `.github/workflows/build.yml`。该工作流会在推送 `v*` tag 时分别构建 Linux、macOS、Windows，并创建 GitHub Release：
+仓库已包含 `.github/workflows/build.yml`。该工作流会在推送 `v*` tag 时分别构建 Linux（deb + AppImage，x64 + arm64）、macOS、Windows，并创建 GitHub Release：
 
 ```yaml
 name: Build & Release
@@ -169,15 +185,17 @@ jobs:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
       - name: Install build tools
         run: sudo apt-get install -y xz-utils binutils
-      - name: Build
-        run: npm run build:linux
+      - name: Build deb + AppImage (x64 + arm64)
+        run: npm run build:linux:all
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: purr-pause-linux
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/*.AppImage
 
   build-mac:
     runs-on: macos-latest
@@ -241,8 +259,8 @@ jobs:
 ### 使用方法
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 推送 tag 后 GitHub Actions 会自动在三个平台上构建，构建完成后在 Actions 页面下载产物。
@@ -286,9 +304,18 @@ purr-pause/
 ├── preload.js           # IPC 桥接
 ├── config.json          # 默认配置
 ├── package.json         # 项目配置 & 打包配置
+├── lib/
+│   ├── license.js       # 激活/授权逻辑
+│   ├── message-notify.js # 消息提醒
+│   └── logger.js        # 日志
 ├── renderer/
-│   ├── index.html       # 猫咪动画覆盖层
-│   └── settings.html    # 设置窗口
+│   ├── index.html            # 猫咪动画覆盖层
+│   ├── settings.html         # 设置窗口
+│   ├── activation.html       # 激活窗口
+│   ├── message-list.html     # 消息列表
+│   ├── message-settings.html # 消息提醒设置
+│   ├── rocket-demo.html      # 小火箭演示
+│   └── rules.html            # 规则说明
 ├── assets/
 │   ├── images/
 │   │   ├── logo.png

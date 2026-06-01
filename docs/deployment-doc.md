@@ -34,10 +34,10 @@ sudo apt install xprintidle
 
 ```bash
 # 下载最新版本
-wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.2.0_amd64.deb
+wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.3.0_amd64.deb
 
 # 安装
-sudo dpkg -i purr-pause_1.2.0_amd64.deb
+sudo dpkg -i purr-pause_1.3.0_amd64.deb
 
 # 如有依赖问题
 sudo apt-get install -f
@@ -315,14 +315,24 @@ npm start
 npm run dev
 ```
 
-### 9.4 构建 .deb 包
+### 9.4 构建 Linux 包（deb / AppImage，x64 / arm64）
 
 ```bash
-# 构建 Linux deb 包
+# 当前主机架构的 deb（默认）
 npm run build:linux
 
+# arm64 的 deb（x64 主机可交叉打包，无需 ARM 机器）
+npm run build:linux:arm64
+
+# AppImage（x64 / arm64）
+npm run build:appimage
+npm run build:appimage:arm64
+
+# 一次性产出全部 4 个 Linux 产物（deb + AppImage，x64 + arm64）
+npm run build:linux:all
+
 # 输出位于 dist/ 目录
-ls dist/*.deb
+ls dist/*.deb dist/*.AppImage
 ```
 
 ### 9.5 构建其他平台
@@ -342,7 +352,7 @@ npm run build:all
 
 ### 10.1 当前工作流配置
 
-当前仓库的 `.github/workflows/build.yml` 会在推送 `v*` tag 时构建 Linux、macOS 和 Windows 产物，并创建 GitHub Release：
+当前仓库的 `.github/workflows/build.yml` 会在推送 `v*` tag 时构建 Linux（deb + AppImage，x64 + arm64）、macOS 和 Windows 产物，并创建 GitHub Release：
 
 ```yaml
 name: Build & Release
@@ -370,8 +380,8 @@ jobs:
       - name: Install build tools
         run: sudo apt-get install -y xz-utils binutils
 
-      - name: Build
-        run: npm run build:linux
+      - name: Build deb + AppImage (x64 + arm64)
+        run: npm run build:linux:all
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -379,7 +389,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: purr-pause-linux
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/*.AppImage
 
   build-mac:
     runs-on: macos-latest
@@ -455,7 +467,7 @@ jobs:
 # 1. 确认 package.json/package-lock.json 版本号已更新
 
 # 2. 推送标签触发构建
-git tag v1.2.0
+git tag v1.3.0
 git push origin --tags
 ```
 
