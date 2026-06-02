@@ -6,6 +6,9 @@ const fs = require('fs');
 const license = require('./lib/license');
 const logger = require('./lib/logger');
 const createMessageNotify = require('./lib/message-notify');
+const createAutostart = require('./lib/autostart');
+const createAssets = require('./lib/assets');
+const configLib = require('./lib/config');
 
 app.setName('胖猫暂停一下');
 app.setPath('userData', path.join(app.getPath('appData'), 'purr-pause'));
@@ -32,25 +35,11 @@ const RESOURCES_PATH = IS_PACKAGED
 const USER_CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config.json');
 const MESSAGE_API_SPEC_PATH = path.join(__dirname, 'docs', 'message-api-spec.md');
-const DEFAULT_CONFIG = {
-  thresholdMinutes: 45,
-  breakMinutes: 5,
-  customWebmDir: '',
-  walkVideo: 'cat-walk.webm',
-  idleVideo: 'cat-rest.webm',
-  animationMode: 'walk-center',
-  logEnabled: false,
-  messageNotifyEnabled: false,
-  messageApiBaseUrl: '',
-  messageAuthHeaders: '{}',
-  messageSources: [],
-  messagePollInterval: 60,
-  messageMaxCacheItems: 30,
-  messageNotifyDir: '',
-  messageNotifyVideo: 'notify-rocket.webm',
-  messageNotifyAnimation: 'rocket-corner'
-};
-let config = { ...DEFAULT_CONFIG };
+
+const autostart = createAutostart({ app, logger });
+
+let config = { ...configLib.DEFAULT_CONFIG };
+const assets = createAssets({ resourcesPath: RESOURCES_PATH, userDataPath: app.getPath('userData'), defaultNotifyVideo: configLib.DEFAULT_CONFIG.messageNotifyVideo });
 let wins = [];
 let settingsWin = null;
 let messageSettingsWin = null;
@@ -74,241 +63,6 @@ let snoozeThreshold = 0;
 const ROCKET_DEMO_SIZE = 240;
 const ROCKET_DEMO_DURATION_MS = 7000;
 const ROCKET_DEMO_LABEL = '绘家科技';
-
-function isSafeAssetFilename(filename) {
-  if (typeof filename !== 'string') return false;
-  const value = filename.trim();
-  return !!value && !/[\\/]/.test(value) && value === path.basename(value);
-}
-
-function clampNumber(value, min, max, fallback) {
-  const parsed = parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
-
-function isHttpUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch (e) {
-    return false;
-  }
-}
-
-function normalizeMessageAuthHeaders(value) {
-  const text = String(value || '{}').trim() || '{}';
-  const parsed = JSON.parse(text);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('请求头必须是 JSON 对象');
-  }
-  return JSON.stringify(parsed);
-}
-
-function genSourceId() {
-  return 'src-' + Math.random().toString(36).slice(2, 8).padEnd(6, '0');
-}
-
-function migrateMessageSources(config) {
-  if (!config || typeof config !== 'object') return;
-  const sources = Array.isArray(config.messageSources) ? config.messageSources : [];
-  // 旧单源迁移：仅当当前没有任何源且旧 baseUrl 合法时执行（幂等）
-  if (sources.length === 0) {
-    const legacyBaseUrl = String(config.messageApiBaseUrl || '').trim();
-    if (isHttpUrl(legacyBaseUrl)) {
-      config.messageSources = [{
-        id: genSourceId(),
-        name: '默认接口',
-        listUrl: createMessageNotify.resolveListUrl({ baseUrl: legacyBaseUrl }),
-        authHeaders: String(config.messageAuthHeaders || '{}').trim() || '{}',
-        enabled: config.messageNotifyEnabled === true
-      }];
-      // 旧单源已迁移进 messageSources，清空旧字段，避免日后删除该源后下次启动又被复活。
-      config.messageApiBaseUrl = '';
-      config.messageAuthHeaders = '{}';
-      return;
-    }
-    config.messageSources = [];
-    return;
-  }
-  // 已有源：逐源补默认值/规整，并保证 id 非空且唯一
-  const seenIds = new Set();
-  config.messageSources = sources.map((raw) => {
-    const source = raw && typeof raw === 'object' ? raw : {};
-    let id = String(source.id || '').trim();
-    if (!id || seenIds.has(id)) {
-      id = genSourceId();
-    }
-    seenIds.add(id);
-    return {
-      id,
-      name: String(source.name || '').trim() || '未命名',
-      listUrl: createMessageNotify.resolveListUrl(source),
-      authHeaders: String(source.authHeaders || '{}').trim() || '{}',
-      enabled: !!source.enabled
-    };
-  });
-}
-
-function applyMessageConfig(newConfig) {
-  const enabled = !!newConfig.messageNotifyEnabled;
-
-  // 逐源校验并规整为干净对象
-  const rawSources = Array.isArray(newConfig.messageSources) ? newConfig.messageSources : [];
-  const cleanSources = [];
-  const usedIds = new Set();
-  for (let i = 0; i < rawSources.length; i++) {
-    const raw = rawSources[i] && typeof rawSources[i] === 'object' ? rawSources[i] : {};
-    const name = String(raw.name || '').trim();
-    if (!name) {
-      return { success: false, error: '第 ' + (i + 1) + ' 个接口源名称不能为空' };
-    }
-    const sourceEnabled = !!raw.enabled;
-    const listUrl = createMessageNotify.resolveListUrl(raw);
-    if (sourceEnabled && !isHttpUrl(listUrl)) {
-      return { success: false, error: '「' + name + '」的接口地址必须是 http 或 https URL' };
-    }
-    let authHeaders = '{}';
-    try {
-      authHeaders = normalizeMessageAuthHeaders(raw.authHeaders);
-    } catch (e) {
-      return { success: false, error: '「' + name + '」的请求头格式错误：' + e.message };
-    }
-    let id = String(raw.id || '').trim() || genSourceId();
-    while (usedIds.has(id)) {
-      id = genSourceId();
-    }
-    usedIds.add(id);
-    cleanSources.push({ id, name, listUrl, authHeaders, enabled: sourceEnabled });
-  }
-
-  const filename = String(newConfig.messageNotifyVideo || '').trim() || DEFAULT_CONFIG.messageNotifyVideo;
-  if (!isSafeAssetFilename(filename)) {
-    return { success: false, error: '小火箭素材只能填写文件名，不能包含路径分隔符' };
-  }
-
-  config.messageNotifyEnabled = enabled;
-  config.messageSources = cleanSources;
-  config.messagePollInterval = clampNumber(newConfig.messagePollInterval, 10, 3600, DEFAULT_CONFIG.messagePollInterval);
-  config.messageMaxCacheItems = clampNumber(newConfig.messageMaxCacheItems, 1, 30, DEFAULT_CONFIG.messageMaxCacheItems);
-  if (newConfig.messageNotifyDir !== undefined) {
-    const dir = String(newConfig.messageNotifyDir || '').trim();
-    if (dir) {
-      try {
-        const stat = fs.statSync(dir);
-        if (!stat.isDirectory()) {
-          return { success: false, error: '小火箭素材目录必须是有效目录' };
-        }
-      } catch (e) {
-        return { success: false, error: '小火箭素材目录不存在或无法访问' };
-      }
-      config.messageNotifyDir = dir;
-      generateMessageNotifyReadmeInDir(dir);
-    } else {
-      config.messageNotifyDir = '';
-    }
-  }
-  config.messageNotifyVideo = filename;
-  config.messageNotifyAnimation = 'rocket-corner';
-  // 用户已通过多源 UI 保存，旧单源字段（messageApiBaseUrl/messageAuthHeaders）已无意义；
-  // 清空以防 messageSources 被清空后，旧 baseUrl 在下次启动时把已删除的源复活。
-  config.messageApiBaseUrl = '';
-  config.messageAuthHeaders = '{}';
-  return { success: true };
-}
-
-function quoteDesktopExecPart(value) {
-  return '"' + String(value).replace(/(["\\$`])/g, '\\$1') + '"';
-}
-
-function getLinuxAutostartPath() {
-  return path.join(app.getPath('home'), '.config', 'autostart', 'purr-pause.desktop');
-}
-
-function getLinuxLaunchCommand() {
-  // AppImage 运行时 process.execPath 指向临时挂载点（/tmp/.mount_*），重启后失效；
-  // 必须用 process.env.APPIMAGE（.AppImage 文件自身的真实路径）写自启 Exec。
-  if (process.env.APPIMAGE) {
-    return quoteDesktopExecPart(process.env.APPIMAGE);
-  }
-  if (app.isPackaged) {
-    return quoteDesktopExecPart(process.execPath);
-  }
-  return quoteDesktopExecPart(process.execPath) + ' ' + quoteDesktopExecPart(app.getAppPath());
-}
-
-function buildLinuxAutostartEntry() {
-  return [
-    '[Desktop Entry]',
-    'Type=Application',
-    'Name=胖猫暂停一下（PurrPause）',
-    'Comment=胖猫暂停一下 - 屏幕休息提醒',
-    'Exec=' + getLinuxLaunchCommand(),
-    'Icon=purr-pause',
-    'Terminal=false',
-    'Hidden=false',
-    'NoDisplay=false',
-    'X-GNOME-Autostart-enabled=true',
-    'Categories=Utility;',
-    ''
-  ].join('\n');
-}
-
-function isLinuxAutoLaunchEnabled() {
-  if (process.platform !== 'linux') {
-    return app.getLoginItemSettings().openAtLogin;
-  }
-
-  const autostartPath = getLinuxAutostartPath();
-  if (!fs.existsSync(autostartPath)) return false;
-
-  try {
-    const content = fs.readFileSync(autostartPath, 'utf-8');
-    if (/^Hidden\s*=\s*true\s*$/im.test(content)) return false;
-    if (/^X-GNOME-Autostart-enabled\s*=\s*false\s*$/im.test(content)) return false;
-    return true;
-  } catch (e) {
-    logger.warn('读取 Linux 自启动配置失败: ' + e.message);
-    return false;
-  }
-}
-
-function setAutoLaunchEnabled(enabled) {
-  if (process.platform !== 'linux') {
-    app.setLoginItemSettings({ openAtLogin: !!enabled });
-    return;
-  }
-
-  const autostartPath = getLinuxAutostartPath();
-  try {
-    if (enabled) {
-      fs.mkdirSync(path.dirname(autostartPath), { recursive: true });
-      fs.writeFileSync(autostartPath, buildLinuxAutostartEntry(), { mode: 0o644 });
-      logger.info('Linux 自启动已启用: ' + autostartPath);
-    } else if (fs.existsSync(autostartPath)) {
-      fs.unlinkSync(autostartPath);
-      logger.info('Linux 自启动已禁用: ' + autostartPath);
-    }
-  } catch (e) {
-    logger.error('设置 Linux 自启动失败: ' + e.message);
-  }
-}
-
-function loadConfig() {
-  try {
-    const configPath = fs.existsSync(USER_CONFIG_PATH) ? USER_CONFIG_PATH : DEFAULT_CONFIG_PATH;
-    const data = fs.readFileSync(configPath, 'utf-8');
-    config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
-    migrateMessageSources(config);
-    // 旧配置迁移：messageMaxCacheItems 上限由 99 收紧到 30；移除已废弃的 messageListLimit。
-    config.messageMaxCacheItems = clampNumber(config.messageMaxCacheItems, 1, 30, DEFAULT_CONFIG.messageMaxCacheItems);
-    delete config.messageListLimit;
-  } catch (e) {
-    console.error('[purr-pause] Config load failed, using defaults:', e.message);
-    config = { ...DEFAULT_CONFIG };
-    migrateMessageSources(config);
-  }
-}
 
 function detectIdleMethod() {
   if (process.platform === 'darwin') {
@@ -588,53 +342,6 @@ function startMonitoring() {
   }, 10000);
 }
 
-function getVideoPaths() {
-  const customDir = config.customWebmDir || '';
-  const userDir = path.join(app.getPath('userData'), 'webm');
-  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
-  const builtinDir = path.join(RESOURCES_PATH, 'webm');
-
-  const walkFile = config.walkVideo || 'cat-walk.webm';
-  const idleFile = config.idleVideo || 'cat-rest.webm';
-
-  function findFile(filename) {
-    if (customDir) {
-      const customPath = path.join(customDir, filename);
-      if (fs.existsSync(customPath)) return customPath;
-    }
-    const userPath = path.join(userDir, filename);
-    if (fs.existsSync(userPath)) return userPath;
-    return path.join(builtinDir, filename);
-  }
-
-  return {
-    walk: findFile(walkFile),
-    idle: findFile(idleFile)
-  };
-}
-
-function findMediaFile(filename, preferredDirs = []) {
-  if (!isSafeAssetFilename(filename)) return null;
-
-  const customDir = config.customWebmDir || '';
-  const userDir = path.join(app.getPath('userData'), 'webm');
-  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
-  const builtinDir = path.join(RESOURCES_PATH, 'webm');
-
-  const searchDirs = [...preferredDirs, customDir, userDir, builtinDir].filter(Boolean);
-  for (const dir of searchDirs) {
-    const candidate = path.join(dir, filename);
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  return null;
-}
-
-function getRocketMediaUrl(filename) {
-  const mediaPath = findMediaFile(filename || DEFAULT_CONFIG.messageNotifyVideo, [config.messageNotifyDir || '']);
-  return mediaPath ? pathToFileURL(mediaPath).toString() : '';
-}
-
 function triggerCat(manual) {
   if (isOverlayShowing) return;
   if (!manual && Date.now() - lastDismissTime < 60000) return;
@@ -646,7 +353,7 @@ function triggerCat(manual) {
   wins.forEach(w => { if (w && !w.isDestroyed()) w.destroy(); });
   wins = [];
 
-  const videos = getVideoPaths();
+  const videos = assets.getVideoPaths(config);
 
   displays.forEach((display) => {
     const { x, y, width, height } = display.workArea;
@@ -721,7 +428,7 @@ function triggerRocketDemo(options = {}) {
   const margin = 24;
   const label = String(options.label || ROCKET_DEMO_LABEL);
   const count = String(options.count || 3);
-  const mediaUrl = options.mediaUrl || getRocketMediaUrl(config.messageNotifyVideo);
+  const mediaUrl = options.mediaUrl || assets.getRocketMediaUrl(config.messageNotifyVideo, config);
   const startX = Math.round(Math.max(area.x + margin, area.x + area.width - ROCKET_DEMO_SIZE - margin));
   const startY = Math.round(Math.max(area.y + margin, area.y + area.height - ROCKET_DEMO_SIZE - margin));
   const endY = Math.round(Math.max(area.y + margin, area.y + area.height * 0.14));
@@ -894,96 +601,6 @@ function rebuildTrayMenu() {
   tray.setContextMenu(contextMenu);
 }
 
-function saveConfig() {
-  try {
-    const dir = path.dirname(USER_CONFIG_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const toSave = { ...config };
-    if (process.argv.includes('--dev')) {
-      toSave.thresholdMinutes = DEFAULT_CONFIG.thresholdMinutes;
-    }
-    fs.writeFileSync(USER_CONFIG_PATH, JSON.stringify(toSave, null, 2));
-  } catch (e) {
-    console.error('[purr-pause] Config save failed:', e.message);
-  }
-}
-
-function generateReadmeInDir(dir) {
-  try {
-    if (!fs.existsSync(dir)) return;
-    const readmePath = path.join(dir, 'purr-pause-素材说明.txt');
-    if (fs.existsSync(readmePath)) return;
-    fs.writeFileSync(readmePath, [
-      '=== 胖猫暂停一下（PurrPause） 自定义素材说明 ===',
-      '',
-      '将你的 .webm 视频文件放在此目录下即可替换内置素材。',
-      '',
-      '文件要求：',
-      '  - 格式：WebM（VP9 编码，带 Alpha 通道实现透明背景）',
-      '  - 背景：必须透明，否则会遮挡桌面',
-      '  - 建议尺寸：宽高 200~500px',
-      '',
-      '需要提供两个文件：',
-      '  - cat-walk.webm  → 猫走路动画（从右往左走，播放一次）',
-      '  - cat-rest.webm  → 猫躺下/休息动画（循环播放）',
-      '  - notify-rocket.webm → 小火箭消息提醒动画（可选，找不到时使用内置 SVG）',
-      '',
-      '如需使用其他文件名，请在设置中的 config.json 添加：',
-      '  "walkVideo": "你的走路文件.webm"',
-      '  "idleVideo": "你的躺下文件.webm"',
-      '  "messageNotifyVideo": "你的小火箭文件.webm"',
-      '',
-      '制作建议：',
-      '  - 使用 FFmpeg 导出带 Alpha 通道的 WebM：',
-      '    ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 2M output.webm',
-      '  - 走路动画建议 2~4 秒，猫从画面右侧走到左侧',
-      '  - 休息动画可以是猫趴着、打呼噜等循环动作',
-      '  - 小火箭动画建议 240x240 左右，透明背景，火箭主体保持在画面中间',
-      ''
-    ].join('\n'));
-  } catch (e) {
-    console.error('[purr-pause] Failed to generate readme:', e.message);
-  }
-}
-
-function generateMessageNotifyReadmeInDir(dir) {
-  try {
-    if (!fs.existsSync(dir)) return;
-    const readmePath = path.join(dir, 'purr-pause-消息提醒素材说明.txt');
-    if (fs.existsSync(readmePath)) return;
-    fs.writeFileSync(readmePath, [
-      '=== 胖猫暂停一下（PurrPause） 消息提醒素材说明 ===',
-      '',
-      '将你的小火箭提醒 .webm 视频文件放在此目录下即可替换消息提醒动画素材。',
-      '',
-      '默认文件名：',
-      '  - notify-rocket.webm → 小火箭消息提醒动画',
-      '',
-      '文件要求：',
-      '  - 格式：WebM（VP9 编码，带 Alpha 通道实现透明背景）',
-      '  - 背景：必须透明，否则会遮挡桌面',
-      '  - 建议尺寸：240x240 左右',
-      '  - 建议时长：2~4 秒，火箭主体保持在画面中间',
-      '',
-      '查找顺序：',
-      '  1. 消息提醒设置中的“小火箭素材目录”',
-      '  2. 通用素材目录',
-      '  3. 用户默认素材目录 ~/.config/purr-pause/webm/',
-      '  4. 应用内置素材目录',
-      '',
-      '如需使用其他文件名，请在“消息提醒设置”中修改“小火箭素材”。',
-      '文件名只能填写文件名，例如 notify-rocket.webm，不能包含目录分隔符。',
-      '',
-      '制作建议：',
-      '  - 使用 FFmpeg 导出带 Alpha 通道的 WebM：',
-      '    ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 2M notify-rocket.webm',
-      ''
-    ].join('\n'));
-  } catch (e) {
-    console.error('[purr-pause] Failed to generate message notify readme:', e.message);
-  }
-}
-
 function openRules() {
   if (rulesWin) {
     rulesWin.focus();
@@ -1065,7 +682,7 @@ function openSettings() {
   settingsWin.webContents.on('did-finish-load', () => {
     const licenseStatus = license.checkStatus(app.getPath('userData'));
     const isActivated = licenseStatus.status === 'active';
-    settingsWin.webContents.send('load-config', { ...config, _isActivated: isActivated, _autoLaunch: isLinuxAutoLaunchEnabled() });
+    settingsWin.webContents.send('load-config', { ...config, _isActivated: isActivated, _autoLaunch: autostart.isEnabled() });
     settingsWin.webContents.executeJavaScript('document.body.scrollHeight').then((contentH) => {
       const frameExtra = settingsWin.getSize()[1] - settingsWin.getContentSize()[1];
       const winH = Math.min(contentH + frameExtra, maxH);
@@ -1145,7 +762,7 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
-  loadConfig();
+  config = configLib.load({ userConfigPath: USER_CONFIG_PATH, defaultConfigPath: DEFAULT_CONFIG_PATH });
   logger.init(app.getPath('userData'), config.logEnabled);
   logger.info('应用启动, 版本 ' + require('./package.json').version);
   logger.info('配置加载: thresholdMinutes=' + config.thresholdMinutes + ', breakMinutes=' + config.breakMinutes + ', animationMode=' + config.animationMode);
@@ -1155,9 +772,9 @@ app.whenReady().then(() => {
 
   const userWebmDir = path.join(app.getPath('userData'), 'webm');
   if (!fs.existsSync(userWebmDir)) fs.mkdirSync(userWebmDir, { recursive: true });
-  generateReadmeInDir(userWebmDir);
+  assets.generateReadmeInDir(userWebmDir);
   if (config.messageNotifyDir) {
-    generateMessageNotifyReadmeInDir(config.messageNotifyDir);
+    assets.generateMessageNotifyReadmeInDir(config.messageNotifyDir);
   }
 
   createTray();
@@ -1173,7 +790,7 @@ app.whenReady().then(() => {
     preloadPath: path.join(__dirname, 'preload.js'),
     rendererDir: path.join(__dirname, 'renderer'),
     logger,
-    getNotifyMediaUrl: getRocketMediaUrl,
+    getNotifyMediaUrl: (filename) => assets.getRocketMediaUrl(filename, config),
     isRestOverlayShowing: () => isOverlayShowing,
     onBadgeChange: (count) => {
       messageBadgeCount = count;
@@ -1236,7 +853,7 @@ ipcMain.on('save-config', (event, newConfig) => {
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyDir')
     || Object.prototype.hasOwnProperty.call(newConfig, 'messageNotifyVideo');
   if (hasMessageConfig) {
-    const messageResult = applyMessageConfig(newConfig);
+    const messageResult = configLib.applyMessageConfig(config, newConfig, assets.generateMessageNotifyReadmeInDir);
     if (!messageResult.success) {
       event.sender.send('save-config-result', messageResult);
       return;
@@ -1257,7 +874,7 @@ ipcMain.on('save-config', (event, newConfig) => {
     }
   }
   if (newConfig.autoLaunch !== undefined) {
-    setAutoLaunchEnabled(!!newConfig.autoLaunch);
+    autostart.setEnabled(!!newConfig.autoLaunch);
   }
   if (newConfig.customWebmDir !== undefined) {
     const licenseStatus = license.checkStatus(app.getPath('userData'));
@@ -1267,7 +884,7 @@ ipcMain.on('save-config', (event, newConfig) => {
           const stat = fs.statSync(newConfig.customWebmDir);
           if (stat.isDirectory()) {
             config.customWebmDir = newConfig.customWebmDir;
-            generateReadmeInDir(newConfig.customWebmDir);
+            assets.generateReadmeInDir(newConfig.customWebmDir);
           }
         } catch (e) {}
       } else {
@@ -1279,7 +896,7 @@ ipcMain.on('save-config', (event, newConfig) => {
     config.logEnabled = !!newConfig.logEnabled;
     logger.setEnabled(config.logEnabled);
   }
-  saveConfig();
+  configLib.save({ userConfigPath: USER_CONFIG_PATH, config, isDev: process.argv.includes('--dev') });
   if (messageNotify) messageNotify.updateConfig(config);
   messageBadgeCount = messageNotify ? messageNotify.getBadgeCount() : 0;
   updateTray();
