@@ -63,16 +63,16 @@ npm run build:linux:all
 ### 产物位置
 
 ```
-dist/purr-pause_1.3.0_amd64.deb           # x64 deb
-dist/purr-pause_1.3.0_arm64.deb           # arm64 deb
-dist/purr-pause-1.3.0.AppImage            # x64 AppImage
-dist/purr-pause-1.3.0-arm64.AppImage      # arm64 AppImage
+dist/purr-pause_1.4.0_amd64.deb           # x64 deb
+dist/purr-pause_1.4.0_arm64.deb           # arm64 deb
+dist/purr-pause-1.4.0.AppImage            # x64 AppImage
+dist/purr-pause-1.4.0-arm64.AppImage      # arm64 AppImage
 ```
 
 ### 安装测试
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.3.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.4.0_amd64.deb
 ```
 
 通过 `sudo dpkg -i` 安装时，deb 的 `afterInstall` 脚本会先把 `/opt/purr-pause/chrome-sandbox` 设置为 `root:root` 和 `4755`，避免 Electron 启动时报 SUID sandbox 权限错误；随后为执行 sudo 的桌面用户写入 `~/.config/autostart/purr-pause.desktop`，用于 Ubuntu 登录后自启动。应用内设置页的“开机自动启动”开关读写同一个文件。
@@ -110,8 +110,8 @@ npm run build:mac
 ### 产物位置
 
 ```
-dist/purr-pause-1.3.0.dmg
-dist/purr-pause-1.3.0-arm64.dmg  (Apple Silicon)
+dist/purr-pause-1.4.0.dmg
+dist/purr-pause-1.4.0-arm64.dmg  (Apple Silicon)
 ```
 
 ### 安装测试
@@ -147,8 +147,8 @@ npm run build:win:all
 ### 产物位置
 
 ```
-dist/purr-pause-Setup-1.3.0-x64.exe      # x64
-dist/purr-pause-Setup-1.3.0-arm64.exe    # arm64
+dist/purr-pause-Setup-1.4.0-x64.exe      # x64
+dist/purr-pause-Setup-1.4.0-arm64.exe    # arm64
 ```
 
 ### 安装测试
@@ -267,8 +267,8 @@ jobs:
 ### 使用方法
 
 ```bash
-git tag v1.3.0
-git push origin v1.3.0
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
 推送 tag 后 GitHub Actions 会自动在三个平台上构建，构建完成后在 Actions 页面下载产物。

@@ -34,10 +34,10 @@ sudo apt install xprintidle
 
 ```bash
 # 下载最新版本
-wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.3.0_amd64.deb
+wget https://github.com/purr-pause/purr-pause/releases/latest/download/purr-pause_1.4.0_amd64.deb
 
 # 安装
-sudo dpkg -i purr-pause_1.3.0_amd64.deb
+sudo dpkg -i purr-pause_1.4.0_amd64.deb
 
 # 如有依赖问题
 sudo apt-get install -f
@@ -467,7 +467,7 @@ jobs:
 # 1. 确认 package.json/package-lock.json 版本号已更新
 
 # 2. 推送标签触发构建
-git tag v1.3.0
+git tag v1.4.0
 git push origin --tags
 ```
 

@@ -211,6 +211,15 @@
                 <input type="checkbox" id="autoLaunch" style="width:18px;height:18px;cursor:pointer;">
             </div>
         </div>
+        <div class="field">
+            <div>
+                <label>运行日志</label>
+                <div class="hint">记录运行信息到日志文件，用于排查问题（默认关闭）</div>
+            </div>
+            <div>
+                <input type="checkbox" id="logEnabled" style="width:18px;height:18px;cursor:pointer;">
+            </div>
+        </div>
     </div>
     <div class="actions">
         <button class="btn-cancel" id="cancelBtn">取消</button>
@@ -224,6 +233,7 @@
         const breakInput = document.getElementById('breakMinutes');
         const animationModeInput = document.getElementById('animationMode');
         const autoLaunchInput = document.getElementById('autoLaunch');
+        const logEnabledInput = document.getElementById('logEnabled');
         const statusEl = document.getElementById('status');
         const webmDirHint = document.getElementById('webmDirHint');
         let customWebmDir = '';
@@ -236,6 +246,7 @@
             customWebmDir = config.customWebmDir || '';
             isActivated = config._isActivated || false;
             autoLaunchInput.checked = config._autoLaunch || false;
+            logEnabledInput.checked = config.logEnabled || false;
             webmDirHint.textContent = customWebmDir || '使用默认目录';
 
             if (!isActivated) {
@@ -316,7 +327,8 @@
                 breakMinutes: parseInt(breakInput.value),
                 animationMode: animationModeInput.value,
                 customWebmDir: customWebmDir,
-                autoLaunch: autoLaunchInput.checked
+                autoLaunch: autoLaunchInput.checked,
+                logEnabled: logEnabledInput.checked
             };
             window.electronAPI.saveConfig(newConfig);
         });

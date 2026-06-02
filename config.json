@@ -2,6 +2,7 @@
   "thresholdMinutes": 45,
   "breakMinutes": 5,
   "animationMode": "walk-center",
+  "logEnabled": false,
   "messageNotifyEnabled": false,
   "messageApiBaseUrl": "",
   "messageAuthHeaders": "{}",

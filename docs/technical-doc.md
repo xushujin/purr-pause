@@ -5,7 +5,7 @@
 胖猫暂停一下（PurrPause） 是一款基于 Electron 的桌面应用程序，运行于 Linux、macOS 和 Windows 系统。当用户连续使用电脑超过设定时间后，一只胖猫会走上屏幕，提醒用户休息。
 
 - **应用名称**: 胖猫暂停一下（PurrPause）
-- **版本**: 1.3.0
+- **版本**: 1.4.0
 - **许可证**: MIT
 - **应用 ID**: com.purr-pause.app
 

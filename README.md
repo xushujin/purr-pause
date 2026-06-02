@@ -25,7 +25,7 @@
 ### Ubuntu / Debian
 
 ```bash
-sudo dpkg -i dist/purr-pause_1.3.0_amd64.deb
+sudo dpkg -i dist/purr-pause_1.4.0_amd64.deb
 ```
 
 ### 从源码运行

@@ -39,6 +39,7 @@ const DEFAULT_CONFIG = {
   walkVideo: 'cat-walk.webm',
   idleVideo: 'cat-rest.webm',
   animationMode: 'walk-center',
+  logEnabled: false,
   messageNotifyEnabled: false,
   messageApiBaseUrl: '',
   messageAuthHeaders: '{}',
@@ -1144,9 +1145,9 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
-  logger.init(app.getPath('userData'));
-  logger.info('应用启动, 版本 ' + require('./package.json').version);
   loadConfig();
+  logger.init(app.getPath('userData'), config.logEnabled);
+  logger.info('应用启动, 版本 ' + require('./package.json').version);
   logger.info('配置加载: thresholdMinutes=' + config.thresholdMinutes + ', breakMinutes=' + config.breakMinutes + ', animationMode=' + config.animationMode);
   detectIdleMethod();
   logger.info('空闲检测方式: ' + (idleMethod || '无'));
@@ -1273,6 +1274,10 @@ ipcMain.on('save-config', (event, newConfig) => {
         config.customWebmDir = '';
       }
     }
+  }
+  if (newConfig.logEnabled !== undefined) {
+    config.logEnabled = !!newConfig.logEnabled;
+    logger.setEnabled(config.logEnabled);
   }
   saveConfig();
   if (messageNotify) messageNotify.updateConfig(config);
