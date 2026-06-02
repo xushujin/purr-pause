@@ -389,8 +389,8 @@ ls dist/*.deb dist/*.AppImage</code></pre>
 <pre><code># macOS
 npm run build:mac
 
-# Windows
-npm run build:win
+# Windows（x64 + arm64）
+npm run build:win:all
 
 # 全平台
 npm run build:all</code></pre>
@@ -472,8 +472,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build:win
+      - name: Build x64 + arm64
+        run: npm run build:win:all
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

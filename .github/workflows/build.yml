@@ -74,8 +74,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build:win
+      - name: Build x64 + arm64
+        run: npm run build:win:all
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -476,9 +476,9 @@ machineId = sha256(parts.join('|')).substring(0, 16);
 
 | 平台 | 目标格式 | 命令 |
 |------|---------|------|
-| Linux | .deb | `npm run build:linux` |
-| macOS | .dmg | `npm run build:mac` |
-| Windows | .exe (NSIS) | `npm run build:win` |
+| Linux | .deb / AppImage（x64 / arm64） | `npm run build:linux:all` |
+| macOS | .dmg（Intel / Apple Silicon） | `npm run build:mac -- --x64 --arm64` |
+| Windows | .exe NSIS（x64 / arm64） | `npm run build:win:all` |
 | 全平台 | 全部 | `npm run build:all` |
 
 打包身份使用 ASCII slug `purr-pause`，因此 Linux deb 安装到 `/opt/purr-pause`，可执行文件为 `/opt/purr-pause/purr-pause`；桌面菜单显示名通过 Linux desktop entry 覆盖为“胖猫暂停一下”。Linux deb 包通过 `deb.afterInstall` 执行 `scripts/postinstall.sh`。使用 `sudo dpkg -i` 安装时，脚本会先把 `/opt/purr-pause/chrome-sandbox` 设置为 `root:root` 和 `4755`，满足 Electron SUID sandbox 要求；随后根据 `SUDO_USER` 为真实桌面用户写入 `~/.config/autostart/purr-pause.desktop`。应用内“开机自动启动”开关也会读写同一个用户自启动文件。macOS 和 Windows 继续使用 Electron 的 `setLoginItemSettings()`。

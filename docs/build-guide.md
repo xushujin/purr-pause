@@ -6,7 +6,7 @@
 |------|---------|---------|
 | Linux (.deb / AppImage) | Ubuntu 18.04+ 或任意 Linux（x64 / arm64） | Node.js 18+, npm, `xz-utils`, `binutils` |
 | macOS (.dmg) | macOS 11+ | Node.js 18+, npm, Xcode Command Line Tools |
-| Windows (.exe) | Windows 10+ | Node.js 18+, npm |
+| Windows (.exe) | Windows 10+（x64 / arm64） | Node.js 18+, npm |
 
 ## 通用步骤
 
@@ -134,13 +134,21 @@ dist/purr-pause-1.3.0-arm64.dmg  (Apple Silicon)
 ### 打包命令
 
 ```bash
+# 当前主机架构（默认）
 npm run build:win
+
+# arm64（x64 主机可交叉打包，无需 ARM 机器）
+npm run build:win:arm64
+
+# x64 + arm64（一次产出两个安装包）
+npm run build:win:all
 ```
 
 ### 产物位置
 
 ```
-dist/purr-pause-Setup-1.3.0.exe
+dist/purr-pause-Setup-1.3.0-x64.exe      # x64
+dist/purr-pause-Setup-1.3.0-arm64.exe    # arm64
 ```
 
 ### 安装测试
@@ -226,8 +234,8 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install
-      - name: Build
-        run: npm run build:win
+      - name: Build x64 + arm64
+        run: npm run build:win:all
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload artifact

@@ -104,7 +104,7 @@
     <tr><th>平台</th><th>系统要求</th><th>工具要求</th></tr>
     <tr><td>Linux (.deb / AppImage)</td><td>Ubuntu 18.04+ 或任意 Linux（x64 / arm64）</td><td>Node.js 18+, npm, xz-utils, binutils</td></tr>
     <tr><td>macOS (.dmg)</td><td>macOS 11+</td><td>Node.js 18+, npm, Xcode Command Line Tools</td></tr>
-    <tr><td>Windows (.exe)</td><td>Windows 10+</td><td>Node.js 18+, npm</td></tr>
+    <tr><td>Windows (.exe)</td><td>Windows 10+（x64 / arm64）</td><td>Node.js 18+, npm</td></tr>
 </table>
 
 <h2>通用步骤</h2>
@@ -186,10 +186,18 @@ sudo dpkg -r purr-pause</code></pre>
 <h2>Windows 打包 (.exe)</h2>
 
 <h3>打包命令</h3>
-<pre><code>npm run build:win</code></pre>
+<pre><code># 当前主机架构（默认）
+npm run build:win
+
+# arm64（x64 主机可交叉打包，无需 ARM 机器）
+npm run build:win:arm64
+
+# x64 + arm64（一次产出两个安装包）
+npm run build:win:all</code></pre>
 
 <h3>产物位置</h3>
-<pre><code>dist/purr-pause-Setup-1.3.0.exe</code></pre>
+<pre><code>dist/purr-pause-Setup-1.3.0-x64.exe      # x64
+dist/purr-pause-Setup-1.3.0-arm64.exe    # arm64</code></pre>
 
 <div class="warn">未签名的安装包会触发 Windows SmartScreen 警告，用户需要点击"更多信息" → "仍要运行"。</div>
 
@@ -202,7 +210,7 @@ npm run build:win</code></pre>
 
 <h2>GitHub Actions 自动构建（推荐）</h2>
 
-<p>推送 tag 后自动在三个平台上构建，无需本地配置多平台环境。Linux 侧产出 deb + AppImage（x64 + arm64）共 4 个产物，macOS 产出 Intel + Apple Silicon 双架构 dmg。</p>
+<p>推送 tag 后自动在三个平台上构建，无需本地配置多平台环境。Linux 侧产出 deb + AppImage（x64 + arm64）共 4 个产物，macOS 产出 Intel + Apple Silicon 双架构 dmg，Windows 产出 x64 + arm64 两个安装包。</p>
 
 <h3>触发方式</h3>
 <pre><code>git tag v1.3.0

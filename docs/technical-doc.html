@@ -523,9 +523,9 @@ app.commandLine.appendSwitch('disable-software-rasterizer');</code></pre>
         <p>构建工具使用 <code>electron-builder</code>（v26+），支持多平台打包：</p>
         <table>
             <tr><th>平台</th><th>目标格式</th><th>命令</th></tr>
-            <tr><td>Linux</td><td>.deb</td><td><code>npm run build:linux</code></td></tr>
-            <tr><td>macOS</td><td>.dmg</td><td><code>npm run build:mac</code></td></tr>
-            <tr><td>Windows</td><td>.exe (NSIS)</td><td><code>npm run build:win</code></td></tr>
+            <tr><td>Linux</td><td>.deb / AppImage（x64 / arm64）</td><td><code>npm run build:linux:all</code></td></tr>
+            <tr><td>macOS</td><td>.dmg（Intel / Apple Silicon）</td><td><code>npm run build:mac -- --x64 --arm64</code></td></tr>
+            <tr><td>Windows</td><td>.exe NSIS（x64 / arm64）</td><td><code>npm run build:win:all</code></td></tr>
             <tr><td>全平台</td><td>全部</td><td><code>npm run build:all</code></td></tr>
         </table>
         <p>打包身份使用 ASCII slug <code>purr-pause</code>，因此 Linux deb 安装到 <code>/opt/purr-pause</code>，可执行文件为 <code>/opt/purr-pause/purr-pause</code>；桌面菜单显示名通过 Linux desktop entry 覆盖为“胖猫暂停一下”。Linux deb 包通过 <code>deb.afterInstall</code> 执行 <code>scripts/postinstall.sh</code>。使用 <code>sudo dpkg -i</code> 安装时，脚本会先把 <code>/opt/purr-pause/chrome-sandbox</code> 设置为 <code>root:root</code> 和 <code>4755</code>，满足 Electron SUID sandbox 要求；随后根据 <code>SUDO_USER</code> 为真实桌面用户写入 <code>~/.config/autostart/purr-pause.desktop</code>。应用内“开机自动启动”开关也会读写同一个用户自启动文件。macOS 和 Windows 继续使用 Electron 的 <code>setLoginItemSettings()</code>。</p>
